@@ -9,7 +9,7 @@ export interface PublicFile {
   modified: string;
 }
 
-export const generatedAt = "2026-08-05T22:41:56.646Z";
+export const generatedAt = "2026-08-19T14:18:41.790Z";
 
 export const publicFiles: PublicFile[] = [
   {
@@ -34,6 +34,13 @@ export const publicFiles: PublicFile[] = [
     "modified": "2026-08-05T00:11:38.000Z"
   },
   {
+    "name": "learn-the-business.pdf",
+    "urlPath": "/learn-the-business.pdf",
+    "bytes": 155790,
+    "ext": "pdf",
+    "modified": "2026-08-11T21:41:43.000Z"
+  },
+  {
     "name": "nobody-tells-you-pm.pdf",
     "urlPath": "/nobody-tells-you-pm.pdf",
     "bytes": 160736,
@@ -41,10 +48,73 @@ export const publicFiles: PublicFile[] = [
     "modified": "2026-08-05T05:20:41.000Z"
   },
   {
+    "name": "part-1-find-the-thing.pdf",
+    "urlPath": "/part-1-find-the-thing.pdf",
+    "bytes": 172990,
+    "ext": "pdf",
+    "modified": "2026-08-12T18:55:48.000Z"
+  },
+  {
+    "name": "part-2-write-the-rule.pdf",
+    "urlPath": "/part-2-write-the-rule.pdf",
+    "bytes": 174262,
+    "ext": "pdf",
+    "modified": "2026-08-12T18:55:53.000Z"
+  },
+  {
+    "name": "part-3-run-it-by-hand.pdf",
+    "urlPath": "/part-3-run-it-by-hand.pdf",
+    "bytes": 171955,
+    "ext": "pdf",
+    "modified": "2026-08-12T18:55:57.000Z"
+  },
+  {
+    "name": "part-4-send-it-right.pdf",
+    "urlPath": "/part-4-send-it-right.pdf",
+    "bytes": 161536,
+    "ext": "pdf",
+    "modified": "2026-08-12T18:56:01.000Z"
+  },
+  {
+    "name": "part-5-guardrails.pdf",
+    "urlPath": "/part-5-guardrails.pdf",
+    "bytes": 170333,
+    "ext": "pdf",
+    "modified": "2026-08-12T18:56:05.000Z"
+  },
+  {
     "name": "parts-ai-takes.pdf",
     "urlPath": "/parts-ai-takes.pdf",
     "bytes": 156180,
     "ext": "pdf",
     "modified": "2026-08-05T05:20:46.000Z"
+  },
+  {
+    "name": "the-conference-play.pdf",
+    "urlPath": "/the-conference-play.pdf",
+    "bytes": 184317,
+    "ext": "pdf",
+    "modified": "2026-08-11T21:41:47.000Z"
+  },
+  {
+    "name": "the-pitch.pdf",
+    "urlPath": "/the-pitch.pdf",
+    "bytes": 168270,
+    "ext": "pdf",
+    "modified": "2026-08-11T21:41:30.000Z"
+  },
+  {
+    "name": "the-pm-loop.pdf",
+    "urlPath": "/the-pm-loop.pdf",
+    "bytes": 171709,
+    "ext": "pdf",
+    "modified": "2026-08-11T21:41:34.000Z"
+  },
+  {
+    "name": "the-promotion-case.pdf",
+    "urlPath": "/the-promotion-case.pdf",
+    "bytes": 169868,
+    "ext": "pdf",
+    "modified": "2026-08-11T21:41:38.000Z"
   }
 ];
