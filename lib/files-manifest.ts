@@ -9,7 +9,7 @@ export interface PublicFile {
   modified: string;
 }
 
-export const generatedAt = "2026-08-19T14:18:41.790Z";
+export const generatedAt = "2026-08-31T16:18:06.707Z";
 
 export const publicFiles: PublicFile[] = [
   {
@@ -88,6 +88,13 @@ export const publicFiles: PublicFile[] = [
     "bytes": 156180,
     "ext": "pdf",
     "modified": "2026-08-05T05:20:46.000Z"
+  },
+  {
+    "name": "resume.pdf",
+    "urlPath": "/resume.pdf",
+    "bytes": 378853,
+    "ext": "pdf",
+    "modified": "2026-08-31T16:14:02.000Z"
   },
   {
     "name": "the-conference-play.pdf",
