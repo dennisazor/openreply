@@ -9,7 +9,7 @@ export interface PublicFile {
   modified: string;
 }
 
-export const generatedAt = "2026-08-31T16:18:06.707Z";
+export const generatedAt = "2026-09-16T17:42:15.362Z";
 
 export const publicFiles: PublicFile[] = [
   {
@@ -90,11 +90,53 @@ export const publicFiles: PublicFile[] = [
     "modified": "2026-08-05T05:20:46.000Z"
   },
   {
+    "name": "pm-or-tpm.pdf",
+    "urlPath": "/pm-or-tpm.pdf",
+    "bytes": 173877,
+    "ext": "pdf",
+    "modified": "2026-09-05T21:21:24.803Z"
+  },
+  {
+    "name": "product-or-product-marketing.pdf",
+    "urlPath": "/product-or-product-marketing.pdf",
+    "bytes": 192219,
+    "ext": "pdf",
+    "modified": "2026-09-06T02:42:16.199Z"
+  },
+  {
+    "name": "product-or-program.pdf",
+    "urlPath": "/product-or-program.pdf",
+    "bytes": 190872,
+    "ext": "pdf",
+    "modified": "2026-09-06T02:42:16.165Z"
+  },
+  {
+    "name": "program-delivery-or-product-marketing.pdf",
+    "urlPath": "/program-delivery-or-product-marketing.pdf",
+    "bytes": 201037,
+    "ext": "pdf",
+    "modified": "2026-09-06T02:42:53.942Z"
+  },
+  {
+    "name": "program-or-technical-program.pdf",
+    "urlPath": "/program-or-technical-program.pdf",
+    "bytes": 199187,
+    "ext": "pdf",
+    "modified": "2026-09-06T02:31:31.419Z"
+  },
+  {
     "name": "resume.pdf",
     "urlPath": "/resume.pdf",
     "bytes": 378853,
     "ext": "pdf",
     "modified": "2026-08-31T16:14:02.000Z"
+  },
+  {
+    "name": "technical-delivery-or-product-marketing.pdf",
+    "urlPath": "/technical-delivery-or-product-marketing.pdf",
+    "bytes": 197961,
+    "ext": "pdf",
+    "modified": "2026-09-06T02:42:53.940Z"
   },
   {
     "name": "the-conference-play.pdf",
@@ -123,5 +165,12 @@ export const publicFiles: PublicFile[] = [
     "bytes": 169868,
     "ext": "pdf",
     "modified": "2026-08-11T21:41:38.000Z"
+  },
+  {
+    "name": "the-role-breakdown.pdf",
+    "urlPath": "/the-role-breakdown.pdf",
+    "bytes": 193057,
+    "ext": "pdf",
+    "modified": "2026-09-05T21:25:14.423Z"
   }
 ];
