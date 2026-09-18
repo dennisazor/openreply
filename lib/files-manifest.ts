@@ -9,9 +9,16 @@ export interface PublicFile {
   modified: string;
 }
 
-export const generatedAt = "2026-09-16T17:42:15.362Z";
+export const generatedAt = "2026-09-18T04:53:20.848Z";
 
 export const publicFiles: PublicFile[] = [
+  {
+    "name": "ai-companies-career-guide.pdf",
+    "urlPath": "/ai-companies-career-guide.pdf",
+    "bytes": 114287,
+    "ext": "pdf",
+    "modified": "2026-09-18T04:38:44.896Z"
+  },
   {
     "name": "field-guide.pdf",
     "urlPath": "/field-guide.pdf",
@@ -94,35 +101,35 @@ export const publicFiles: PublicFile[] = [
     "urlPath": "/pm-or-tpm.pdf",
     "bytes": 173877,
     "ext": "pdf",
-    "modified": "2026-09-05T21:21:24.803Z"
+    "modified": "2026-09-18T04:51:15.479Z"
   },
   {
     "name": "product-or-product-marketing.pdf",
     "urlPath": "/product-or-product-marketing.pdf",
     "bytes": 192219,
     "ext": "pdf",
-    "modified": "2026-09-06T02:42:16.199Z"
+    "modified": "2026-09-18T04:51:15.483Z"
   },
   {
     "name": "product-or-program.pdf",
     "urlPath": "/product-or-program.pdf",
     "bytes": 190872,
     "ext": "pdf",
-    "modified": "2026-09-06T02:42:16.165Z"
+    "modified": "2026-09-18T04:51:15.486Z"
   },
   {
     "name": "program-delivery-or-product-marketing.pdf",
     "urlPath": "/program-delivery-or-product-marketing.pdf",
     "bytes": 201037,
     "ext": "pdf",
-    "modified": "2026-09-06T02:42:53.942Z"
+    "modified": "2026-09-18T04:51:15.490Z"
   },
   {
     "name": "program-or-technical-program.pdf",
     "urlPath": "/program-or-technical-program.pdf",
     "bytes": 199187,
     "ext": "pdf",
-    "modified": "2026-09-06T02:31:31.419Z"
+    "modified": "2026-09-18T04:51:15.493Z"
   },
   {
     "name": "resume.pdf",
@@ -136,7 +143,7 @@ export const publicFiles: PublicFile[] = [
     "urlPath": "/technical-delivery-or-product-marketing.pdf",
     "bytes": 197961,
     "ext": "pdf",
-    "modified": "2026-09-06T02:42:53.940Z"
+    "modified": "2026-09-18T04:51:15.496Z"
   },
   {
     "name": "the-conference-play.pdf",
@@ -171,6 +178,6 @@ export const publicFiles: PublicFile[] = [
     "urlPath": "/the-role-breakdown.pdf",
     "bytes": 193057,
     "ext": "pdf",
-    "modified": "2026-09-05T21:25:14.423Z"
+    "modified": "2026-09-18T04:51:15.498Z"
   }
 ];
