@@ -43,3 +43,7 @@ next-env.d.ts
 
 /app/generated/prisma
 .gstack/
+
+# Build artifact: regenerated from public/ by tools/gen-files-manifest.mjs on
+# every build, dev and typecheck. Committing it only let it drift out of date.
+/lib/files-manifest.ts

@@ -4,19 +4,23 @@
  * Lists everything in public/ so a lead magnet URL can be copied straight into
  * a campaign message. The list is a build-time snapshot (see
  * tools/gen-files-manifest.mjs) because public/ is served from the CDN and is
- * not reliably readable from a serverless function at request time.
+ * not reliably readable from a serverless function at request time. Uploads go
+ * through /api/files/upload, which commits to public/ and triggers a rebuild.
  */
 
 import CopyLinkButton from "@/components/copy-link-button";
+import FileUpload from "@/components/file-upload";
+import { auth } from "@/lib/auth";
+import { getUploadConfig, isUploadAllowed } from "@/lib/files/upload";
+import { formatBytes } from "@/lib/files/upload-rules";
 import { publicFiles, generatedAt } from "@/lib/files-manifest";
 
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
+export default async function FilesPage() {
+  const session = await auth();
+  const upload = getUploadConfig();
+  const canUpload =
+    upload.ok && isUploadAllowed(session?.user?.email, upload.config.allowedEmails);
 
-export default function FilesPage() {
   return (
     <div className="space-y-6">
       <div>
@@ -28,12 +32,37 @@ export default function FilesPage() {
         </p>
       </div>
 
+      {canUpload ? (
+        <FileUpload existingNames={publicFiles.map((file) => file.name)} />
+      ) : (
+        <div className="border border-dashed border-border rounded-lg p-4">
+          <p className="text-sm font-medium text-foreground">Uploads are off</p>
+          <p className="text-sm text-muted mt-1">
+            {upload.ok ? (
+              <>
+                Your account isn&apos;t allowed to upload. Add its email to{" "}
+                <code className="text-xs">UPLOAD_ALLOWED_EMAILS</code> in Vercel, then
+                redeploy.
+              </>
+            ) : (
+              <>
+                To upload from this page, set{" "}
+                <code className="text-xs">{upload.missing.join(", ")}</code> in your
+                Vercel project&apos;s environment variables, then redeploy. See{" "}
+                <code className="text-xs">.env.example</code>.
+              </>
+            )}
+          </p>
+        </div>
+      )}
+
       {publicFiles.length === 0 ? (
         <div className="border border-border rounded-lg p-8 text-center">
           <p className="text-sm text-foreground font-medium">No files yet</p>
           <p className="text-sm text-muted mt-2 max-w-md mx-auto">
-            Add a PDF to the <code className="text-xs">public/</code> folder in
-            your repo, commit, and push. It appears here after the next deploy.
+            Upload one above, or commit it to the{" "}
+            <code className="text-xs">public/</code> folder in your repo. It
+            appears here after the next deploy.
           </p>
         </div>
       ) : (
@@ -50,7 +79,7 @@ export default function FilesPage() {
               <div className="min-w-0 flex-1">
                 <p className="text-sm text-foreground truncate">{file.name}</p>
                 <p className="text-xs text-muted truncate">
-                  {file.urlPath} &middot; {formatSize(file.bytes)}
+                  {file.urlPath} &middot; {formatBytes(file.bytes)}
                 </p>
               </div>
 
@@ -69,23 +98,22 @@ export default function FilesPage() {
       )}
 
       <div className="border border-border rounded-lg p-4 space-y-2">
-        <p className="text-sm font-medium text-foreground">Adding a file</p>
+        <p className="text-sm font-medium text-foreground">How files get here</p>
         <ol className="text-sm text-muted space-y-1 list-decimal list-inside">
           <li>
-            Drop it into the <code className="text-xs">public/</code> folder in
-            your repo (use hyphens, no spaces).
+            Upload saves the file to <code className="text-xs">public/</code> in
+            your GitHub repo.
           </li>
+          <li>Vercel sees the change and redeploys, which takes about a minute.</li>
           <li>
-            <code className="text-xs">
-              git add public/ &amp;&amp; git commit -m &quot;Add file&quot;
-              &amp;&amp; git push
-            </code>
+            The file is then live at its link. Committing to{" "}
+            <code className="text-xs">public/</code> yourself works too.
           </li>
-          <li>Vercel redeploys in about a minute, then it shows up here.</li>
         </ol>
         <p className="text-xs text-muted pt-1">
-          Anyone with the link can open these &mdash; there is no password. List
-          generated {new Date(generatedAt).toLocaleString()}.
+          Anyone with the link can open these, because there is no password. Files
+          are also stored in your GitHub repo, so if the repo is public they can be
+          seen there too. List generated {new Date(generatedAt).toLocaleString()}.
         </p>
       </div>
     </div>

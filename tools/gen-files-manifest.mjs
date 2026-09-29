@@ -8,7 +8,10 @@
  * at request time can return nothing. Files only change via a git push
  * (which triggers a rebuild), so a build-time snapshot is always accurate.
  *
- * Runs automatically as part of `npm run build` and `npm run vercel-build`.
+ * Runs automatically as part of `npm run build` and `npm run vercel-build`,
+ * and before `npm run dev` and `npm run typecheck`. The output is gitignored:
+ * a committed copy drifted out of date, and on Vercel a clean checkout means a
+ * build that skipped this script fails loudly instead of listing stale files.
  */
 
 import fs from "node:fs";

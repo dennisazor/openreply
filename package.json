@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "predev": "node tools/gen-files-manifest.mjs",
     "build": "node tools/gen-files-manifest.mjs && prisma generate && next build",
     "vercel-build": "node tools/gen-files-manifest.mjs && prisma generate && prisma migrate deploy && next build",
     "files:manifest": "node tools/gen-files-manifest.mjs",
@@ -13,6 +14,7 @@
     "db:migrate": "prisma migrate deploy",
     "worker": "tsx worker/dm-worker.ts",
     "typecheck": "tsc --noEmit",
+    "pretypecheck": "node tools/gen-files-manifest.mjs",
     "test": "vitest run"
   },
   "dependencies": {
