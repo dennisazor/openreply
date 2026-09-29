@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auth } from "@/lib/auth";
+import { getPublicFiles } from "@/lib/files/public-files";
 import { handleUpload } from "@/lib/files/upload";
 
 export const runtime = "nodejs";
@@ -44,6 +45,9 @@ export async function POST(request: NextRequest) {
     requestedName: typeof name === "string" ? name : null,
     replace: form.get("replace") === "true",
   });
+
+  // Best effort: other instances pick the file up within the listing's 5 s TTL.
+  if (result.body.ok && result.body.status !== "unchanged") getPublicFiles()?.invalidate();
 
   return NextResponse.json(result.body, { status: result.status });
 }

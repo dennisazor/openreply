@@ -2,24 +2,25 @@
  * Files page.
  *
  * Lists everything in public/ so a lead magnet URL can be copied straight into
- * a campaign message. The list is a build-time snapshot (see
- * tools/gen-files-manifest.mjs) because public/ is served from the CDN and is
- * not reliably readable from a serverless function at request time. Uploads go
- * through /api/files/upload, which commits to public/ and triggers a rebuild.
+ * a campaign message. The list is read from GitHub on each visit, so a new
+ * upload shows up at once, with the build-time manifest
+ * (tools/gen-files-manifest.mjs) as the fallback when GitHub can't be reached.
  */
 
 import CopyLinkButton from "@/components/copy-link-button";
 import FileUpload from "@/components/file-upload";
 import { auth } from "@/lib/auth";
+import { getPublicFiles, listFilesForPage } from "@/lib/files/public-files";
 import { getUploadConfig, isUploadAllowed } from "@/lib/files/upload";
 import { formatBytes } from "@/lib/files/upload-rules";
-import { publicFiles, generatedAt } from "@/lib/files-manifest";
+import { publicFiles as builtFiles, generatedAt } from "@/lib/files-manifest";
 
 export default async function FilesPage() {
   const session = await auth();
   const upload = getUploadConfig();
   const canUpload =
     upload.ok && isUploadAllowed(session?.user?.email, upload.config.allowedEmails);
+  const { rows: publicFiles, source } = await listFilesForPage(getPublicFiles(), builtFiles);
 
   return (
     <div className="space-y-6">
@@ -61,8 +62,7 @@ export default async function FilesPage() {
           <p className="text-sm text-foreground font-medium">No files yet</p>
           <p className="text-sm text-muted mt-2 max-w-md mx-auto">
             Upload one above, or commit it to the{" "}
-            <code className="text-xs">public/</code> folder in your repo. It
-            appears here after the next deploy.
+            <code className="text-xs">public/</code> folder in your repo.
           </p>
         </div>
       ) : (
@@ -104,16 +104,19 @@ export default async function FilesPage() {
             Upload saves the file to <code className="text-xs">public/</code> in
             your GitHub repo.
           </li>
-          <li>Vercel sees the change and redeploys, which takes about a minute.</li>
+          <li>Its link works within seconds, served straight from GitHub.</li>
           <li>
-            The file is then live at its link. Committing to{" "}
-            <code className="text-xs">public/</code> yourself works too.
+            Vercel&apos;s next build then serves it like any other file. Replacing
+            a file waits for that build, usually 1 to 2 minutes.
           </li>
         </ol>
         <p className="text-xs text-muted pt-1">
           Anyone with the link can open these, because there is no password. Files
           are also stored in your GitHub repo, so if the repo is public they can be
-          seen there too. List generated {new Date(generatedAt).toLocaleString()}.
+          seen there too.{" "}
+          {source === "github"
+            ? "List read from GitHub just now."
+            : `GitHub didn't answer, so this list is from the last deploy (${new Date(generatedAt).toLocaleString()}).`}
         </p>
       </div>
     </div>

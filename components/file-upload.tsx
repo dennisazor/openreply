@@ -3,12 +3,14 @@
 /**
  * Upload panel for the Files page.
  *
- * An upload is a commit to public/ on GitHub followed by a Vercel rebuild, so
- * success happens in two steps. The panel only says "Live" after it has
- * downloaded the file from the live link and confirmed it matches the upload
- * byte for byte. The commit succeeding is not treated as proof that the link works.
+ * An upload is a commit to public/ on GitHub. A new file's link works within
+ * seconds (lib/files/public-files.ts serves it until Vercel's next build does);
+ * a replaced file keeps its old version until that build finishes. Either way,
+ * the panel only says "Live" after it has downloaded the file from the live
+ * link and confirmed it matches the upload byte for byte.
  */
 
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import CopyLinkButton from "@/components/copy-link-button";
 import {
@@ -30,8 +32,9 @@ type Phase =
   | { kind: "timeout"; result: Uploaded }
   | { kind: "error"; message: string };
 
-const POLL_MS = 8_000;
-const TIMEOUT_MS = 8 * 60_000;
+const POLL_MS = 1_500;
+// New files come straight from GitHub; a replacement has to wait for a Vercel build.
+const timeoutFor = (result: Uploaded) => (result.status === "replaced" ? 8 * 60_000 : 2 * 60_000);
 
 const buttonPrimary =
   "rounded bg-accent px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-accent-hover disabled:opacity-50";
@@ -66,6 +69,7 @@ function formatElapsed(ms: number): string {
 }
 
 export default function FileUpload({ existingNames }: { existingNames: string[] }) {
+  const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [nameInput, setNameInput] = useState("");
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
@@ -140,15 +144,18 @@ export default function FileUpload({ existingNames }: { existingNames: string[] 
 
     async function check() {
       if (cancelled) return;
-      if (Date.now() - startedAt > TIMEOUT_MS) {
+      if (Date.now() - startedAt > timeoutFor(result)) {
         setPhase({ kind: "timeout", result });
         return;
       }
       setElapsed(Date.now() - startedAt);
       const live = await isLive(result);
       if (cancelled) return;
-      if (live) setPhase({ kind: "live", result });
-      else timer = setTimeout(check, POLL_MS);
+      if (live) {
+        setPhase({ kind: "live", result });
+        // Re-read the list on the server so the new file shows up without a reload.
+        router.refresh();
+      } else timer = setTimeout(check, POLL_MS);
     }
 
     timer = setTimeout(check, POLL_MS);
@@ -156,15 +163,15 @@ export default function FileUpload({ existingNames }: { existingNames: string[] 
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [phase]);
+  }, [phase, router]);
 
   return (
     <div className="border border-border rounded-lg p-4 space-y-3">
       <div>
         <p className="text-sm font-medium text-foreground">Upload a file</p>
         <p className="text-xs text-muted mt-0.5">
-          PDF or image, up to {formatBytes(MAX_UPLOAD_BYTES)}. The link works about 1 to 2
-          minutes after you upload, once Vercel finishes redeploying.
+          PDF or image, up to {formatBytes(MAX_UPLOAD_BYTES)}. A new file&apos;s link works
+          within seconds.
         </p>
       </div>
 
@@ -242,10 +249,12 @@ export default function FileUpload({ existingNames }: { existingNames: string[] 
         {phase.kind === "deploying" && (
           <div className="rounded border border-border bg-surface p-3 space-y-1">
             <p className="text-sm text-foreground">
-              Saved to GitHub. Vercel is rebuilding the site.
+              {phase.result.status === "replaced"
+                ? "Saved to GitHub. The old version stays live until Vercel finishes rebuilding, usually 1 to 2 minutes."
+                : "Saved to GitHub. Checking the link..."}
             </p>
             <p className="text-xs text-muted">
-              Checking the live link every few seconds ({formatElapsed(elapsed)} so far).{" "}
+              {formatElapsed(elapsed)} so far.{" "}
               {phase.result.commitUrl && (
                 <a href={phase.result.commitUrl} target="_blank" rel="noopener noreferrer" className="underline">
                   View commit
@@ -276,11 +285,6 @@ export default function FileUpload({ existingNames }: { existingNames: string[] 
               >
                 Open
               </a>
-              {phase.result.status !== "unchanged" && (
-                <button type="button" onClick={() => window.location.reload()} className={buttonSecondary}>
-                  Refresh list
-                </button>
-              )}
               <button type="button" onClick={reset} className={buttonSecondary}>
                 Upload another
               </button>
@@ -291,8 +295,9 @@ export default function FileUpload({ existingNames }: { existingNames: string[] 
         {phase.kind === "timeout" && (
           <div className="rounded border border-error/20 bg-error/10 p-3 space-y-2">
             <p className="text-sm text-foreground">
-              Saved to GitHub, but the link still isn&apos;t serving the new file after 8 minutes.
-              The Vercel build may have failed, so check the latest deployment in Vercel.
+              {phase.result.status === "replaced"
+                ? "Saved to GitHub, but the link still serves the old version after 8 minutes. The Vercel build may have failed, so check the latest deployment in Vercel."
+                : "Saved to GitHub, but the link still isn't serving the file after 2 minutes. GitHub may be slow or the upload token may have expired."}
             </p>
             <div className="flex flex-wrap gap-2">
               <button

@@ -2,8 +2,9 @@
  * Server side of the Files page uploader.
  *
  * Vercel serves public/ from the build, and a running deployment can't write
- * to it. An upload is therefore a commit to public/ on GitHub: Vercel sees the
- * push, rebuilds, and the file is live at /<name> about a minute later.
+ * to it. An upload is therefore a commit to public/ on GitHub. The link works
+ * within seconds through lib/files/public-files.ts, and Vercel's next build
+ * turns it into an ordinary static file.
  */
 
 import { createHash } from "node:crypto";
@@ -39,6 +40,23 @@ export function parseAllowedEmails(value: string | undefined): string[] {
     .filter((email) => email.includes("@"));
 }
 
+/**
+ * The repo and branch that public/ lives in. Vercel exposes the connected repo
+ * at runtime; anywhere else, set GITHUB_UPLOAD_REPO.
+ */
+export function repoFromEnv(
+  env: Env = process.env
+): { owner: string; repo: string; branch: string } | null {
+  const slug =
+    env.GITHUB_UPLOAD_REPO?.trim() ||
+    (env.VERCEL_GIT_REPO_OWNER && env.VERCEL_GIT_REPO_SLUG
+      ? `${env.VERCEL_GIT_REPO_OWNER}/${env.VERCEL_GIT_REPO_SLUG}`
+      : "");
+  const [owner, repo, ...rest] = slug.split("/");
+  if (!owner || !repo || rest.length > 0) return null;
+  return { owner, repo, branch: env.GITHUB_UPLOAD_BRANCH?.trim() || "main" };
+}
+
 export function getUploadConfig(env: Env = process.env): UploadConfigResult {
   const missing: string[] = [];
 
@@ -49,27 +67,12 @@ export function getUploadConfig(env: Env = process.env): UploadConfigResult {
   const allowedEmails = parseAllowedEmails(env.UPLOAD_ALLOWED_EMAILS);
   if (allowedEmails.length === 0) missing.push("UPLOAD_ALLOWED_EMAILS");
 
-  // Vercel exposes the connected repo at runtime; elsewhere, set it explicitly.
-  const slug =
-    env.GITHUB_UPLOAD_REPO?.trim() ||
-    (env.VERCEL_GIT_REPO_OWNER && env.VERCEL_GIT_REPO_SLUG
-      ? `${env.VERCEL_GIT_REPO_OWNER}/${env.VERCEL_GIT_REPO_SLUG}`
-      : "");
-  const [owner, repo, ...rest] = slug.split("/");
-  if (!owner || !repo || rest.length > 0) missing.push("GITHUB_UPLOAD_REPO");
+  const target = repoFromEnv(env);
+  if (!target) missing.push("GITHUB_UPLOAD_REPO");
 
-  if (missing.length > 0) return { ok: false, missing };
+  if (missing.length > 0 || !target) return { ok: false, missing };
 
-  return {
-    ok: true,
-    config: {
-      token,
-      owner,
-      repo,
-      branch: env.GITHUB_UPLOAD_BRANCH?.trim() || "main",
-      allowedEmails,
-    },
-  };
+  return { ok: true, config: { token, ...target, allowedEmails } };
 }
 
 export function isUploadAllowed(
