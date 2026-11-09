@@ -3,6 +3,8 @@
 import { Suspense, useEffect, useState } from "react";
 import type { AccountOption } from "@/components/account-select";
 import { InstagramConnectNotice } from "@/components/instagram-connect-notice";
+import ClaudeConnectorSettings from "@/components/claude-connector-settings";
+import ProfileSettings from "@/components/profile-settings";
 
 interface SettingsData {
   workspace: {
@@ -135,6 +137,8 @@ export default function SettingsPage() {
       <Suspense fallback={null}>
         <InstagramConnectNotice />
       </Suspense>
+
+      <ProfileSettings />
 
       <section className="panel rounded p-4 sm:p-6">
         <h2 className="text-base font-semibold mb-6">Instagram Connection</h2>
@@ -319,6 +323,8 @@ export default function SettingsPage() {
           </form>
         )}
       </section>
+
+      {canManageMembers && <ClaudeConnectorSettings />}
 
       <section className="panel rounded p-4 sm:p-6">
         <h2 className="text-base font-semibold mb-6">Usage</h2>

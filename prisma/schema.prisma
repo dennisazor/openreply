@@ -84,6 +84,8 @@ model Workspace {
   linkClicks        LinkClick[]
   webhookEvents     WebhookEvent[]
   operationalEvents OperationalEvent[]
+  scheduledPosts    ScheduledPost[]
+  apiTokens         ApiToken[]
 
   @@index([ownerId])
 }
@@ -141,6 +143,7 @@ model InstagramAccount {
   dmLogs      DmLog[]
   linkClicks  LinkClick[]
   followerSnapshots FollowerSnapshot[]
+  scheduledPosts    ScheduledPost[]
 
   @@index([workspaceId])
 }
@@ -343,6 +346,77 @@ model OperationalEvent {
   @@index([source])
   @@index([level])
   @@index([createdAt])
+}
+
+/// A Reel queued for publishing. The worker's publish sweep moves it through
+/// SCHEDULED -> CREATING -> PROCESSING -> PUBLISHING -> PUBLISHED. The row is
+/// the source of truth (no Redis job), so a restart or a lost queue never
+/// drops or doubles a post: every step is a guarded status transition.
+model ScheduledPost {
+  id                 String @id @default(cuid())
+  workspaceId        String
+  instagramAccountId String
+
+  /// Public URL Instagram fetches the video from. Instagram Login does not
+  /// support direct uploads, so the file must already be hosted.
+  videoUrl      String
+  caption       String  @default("")
+  coverUrl      String?
+  thumbOffsetMs Int?
+  shareToFeed   Boolean @default(true)
+  /// Set for a trial reel (shown to non-followers first). Null is a normal reel.
+  trialGraduation TrialGraduation?
+
+  publishAt    DateTime
+  status       ScheduledPostStatus @default(SCHEDULED)
+  attempts     Int                 @default(0)
+  containerId  String?
+  mediaId      String?
+  permalink    String?
+  errorMessage String?
+  publishedAt  DateTime?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  workspace        Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  instagramAccount InstagramAccount @relation(fields: [instagramAccountId], references: [id], onDelete: Cascade)
+
+  @@index([status, publishAt])
+  @@index([workspaceId, publishAt])
+}
+
+/// Bearer token for the Claude connector (MCP endpoint). Only the SHA-256 hash
+/// is stored; the plaintext is shown once at creation.
+model ApiToken {
+  id              String    @id @default(cuid())
+  workspaceId     String
+  name            String
+  tokenHash       String    @unique
+  /// First characters of the token, so the Settings list can tell tokens apart.
+  prefix          String
+  createdByUserId String?
+  lastUsedAt      DateTime?
+  revokedAt       DateTime?
+  createdAt       DateTime  @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+}
+
+enum ScheduledPostStatus {
+  SCHEDULED
+  CREATING
+  PROCESSING
+  PUBLISHING
+  PUBLISHED
+  FAILED
+  CANCELED
+}
+
+enum TrialGraduation {
+  MANUAL
+  SS_PERFORMANCE
 }
 
 enum WorkspaceRole {

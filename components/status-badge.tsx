@@ -10,6 +10,13 @@ const statusConfig: Record<string, { text: string; label: string }> = {
   SKIPPED_RATE_LIMIT: { text: "text-warning", label: "Rate limited" },
   SKIPPED_PLAN_LIMIT: { text: "text-warning", label: "Skipped" },
   SKIPPED_NO_MATCH: { text: "text-muted", label: "No match" },
+  // Scheduled post states.
+  SCHEDULED: { text: "text-muted", label: "Scheduled" },
+  CREATING: { text: "text-warning", label: "Uploading" },
+  PROCESSING: { text: "text-warning", label: "Processing" },
+  PUBLISHING: { text: "text-warning", label: "Publishing" },
+  PUBLISHED: { text: "text-success", label: "Published" },
+  CANCELED: { text: "text-muted", label: "Canceled" },
 };
 
 interface StatusBadgeProps {

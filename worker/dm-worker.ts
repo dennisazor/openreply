@@ -1,6 +1,7 @@
 import { createDMWorker } from "@/lib/queue/dm-worker";
 import { recordWorkerHeartbeat } from "@/lib/ops/worker-health";
 import { reconcileComments } from "@/lib/polling/comment-reconciler";
+import { runPublishSweep } from "@/lib/publishing/publisher";
 import os from "node:os";
 
 const worker = createDMWorker();
@@ -43,10 +44,30 @@ async function poll() {
 setTimeout(() => void poll(), 10_000);
 const pollTimer = setInterval(() => void poll(), POLL_INTERVAL_MS);
 
+// Scheduled Reels. Once a minute matches Meta's container status polling
+// guidance. The guard skips a tick while a slow sweep is still running.
+const PUBLISH_INTERVAL_MS = 60_000;
+let publishing = false;
+async function publishSweep() {
+  if (publishing) return;
+  publishing = true;
+  try {
+    await runPublishSweep();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    console.error("[DM Worker] Publish sweep failed:", message);
+  } finally {
+    publishing = false;
+  }
+}
+setTimeout(() => void publishSweep(), 15_000);
+const publishTimer = setInterval(() => void publishSweep(), PUBLISH_INTERVAL_MS);
+
 async function shutdown(signal: string) {
   console.log(`[DM Worker] ${signal} received, closing worker`);
   clearInterval(heartbeatTimer);
   clearInterval(pollTimer);
+  clearInterval(publishTimer);
   await worker.close();
   process.exit(0);
 }

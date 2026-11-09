@@ -758,6 +758,109 @@ export async function subscribeInstagramAccountToWebhooks(
   return handleResponse(response);
 }
 
+// ─── Content publishing (Reels) ─────────────────────────────────────────────
+// Instagram Login publishes from a public video_url only: Meta's resumable
+// upload (rupload.facebook.com) is limited to Facebook Login apps.
+
+export type TrialGraduationStrategy = "MANUAL" | "SS_PERFORMANCE";
+
+export interface ReelContainerInput {
+  videoUrl: string;
+  caption?: string;
+  coverUrl?: string | null;
+  thumbOffsetMs?: number | null;
+  shareToFeed?: boolean;
+  /** Set to publish as a trial reel, shown to non-followers first. */
+  trialGraduation?: TrialGraduationStrategy | null;
+}
+
+export async function createReelContainer(
+  instagramUserId: string,
+  accessToken: string,
+  input: ReelContainerInput
+): Promise<{ id: string }> {
+  const body: Record<string, unknown> = {
+    media_type: "REELS",
+    video_url: input.videoUrl,
+  };
+  if (input.caption) body.caption = input.caption;
+  if (input.coverUrl) body.cover_url = input.coverUrl;
+  if (input.thumbOffsetMs != null) body.thumb_offset = input.thumbOffsetMs;
+  if (input.trialGraduation) {
+    body.trial_params = { graduation_strategy: input.trialGraduation };
+  } else if (input.shareToFeed !== undefined) {
+    // A trial reel goes to non-followers only, so feed sharing is left to
+    // Meta for trials rather than sent alongside trial_params.
+    body.share_to_feed = input.shareToFeed;
+  }
+
+  const response = await fetch(
+    `${instagramGraphBase()}/${instagramUserId}/media`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(body),
+    }
+  );
+
+  return handleResponse(response);
+}
+
+export type ContainerStatusCode =
+  | "EXPIRED"
+  | "ERROR"
+  | "FINISHED"
+  | "IN_PROGRESS"
+  | "PUBLISHED";
+
+export async function getContainerStatus(
+  containerId: string,
+  accessToken: string
+): Promise<{ status_code: ContainerStatusCode; status?: string }> {
+  const url = new URL(`${instagramGraphBase()}/${containerId}`);
+  url.searchParams.set("fields", "status_code,status");
+  url.searchParams.set("access_token", accessToken);
+
+  const response = await fetch(url.toString());
+  return handleResponse(response);
+}
+
+export async function publishContainer(
+  instagramUserId: string,
+  accessToken: string,
+  containerId: string
+): Promise<{ id: string }> {
+  const response = await fetch(
+    `${instagramGraphBase()}/${instagramUserId}/media_publish`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ creation_id: containerId }),
+    }
+  );
+
+  return handleResponse(response);
+}
+
+export async function getMediaPermalink(
+  mediaId: string,
+  accessToken: string
+): Promise<string | null> {
+  const url = new URL(`${instagramGraphBase()}/${mediaId}`);
+  url.searchParams.set("fields", "permalink");
+  url.searchParams.set("access_token", accessToken);
+
+  const response = await fetch(url.toString());
+  const data = await handleResponse<{ permalink?: string }>(response);
+  return data.permalink ?? null;
+}
+
 export async function debugToken(inputToken: string, accessToken: string) {
   const url = new URL(`${facebookGraphBase()}/debug_token`);
   url.searchParams.set("input_token", inputToken);
