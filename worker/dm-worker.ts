@@ -2,6 +2,7 @@ import { createDMWorker } from "@/lib/queue/dm-worker";
 import { recordWorkerHeartbeat } from "@/lib/ops/worker-health";
 import { reconcileComments } from "@/lib/polling/comment-reconciler";
 import { runPublishSweep } from "@/lib/publishing/publisher";
+import { refreshExpiringInstagramTokens } from "@/lib/meta/token-refresh";
 import os from "node:os";
 
 const worker = createDMWorker();
@@ -63,11 +64,30 @@ async function publishSweep() {
 setTimeout(() => void publishSweep(), 15_000);
 const publishTimer = setInterval(() => void publishSweep(), PUBLISH_INTERVAL_MS);
 
+// Token renewal. The daily Vercel cron also runs it; doing it here too means
+// one of them failing never lets an Instagram connection lapse.
+const TOKEN_REFRESH_INTERVAL_MS = 6 * 60 * 60_000;
+async function renewTokens() {
+  try {
+    const results = await refreshExpiringInstagramTokens();
+    const failed = results.filter((r) => r.status === "failed").length;
+    if (results.length) {
+      console.log(`[DM Worker] Token renewal: ${results.length - failed} renewed, ${failed} failed`);
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    console.error("[DM Worker] Token renewal failed:", message);
+  }
+}
+setTimeout(() => void renewTokens(), 30_000);
+const tokenTimer = setInterval(() => void renewTokens(), TOKEN_REFRESH_INTERVAL_MS);
+
 async function shutdown(signal: string) {
   console.log(`[DM Worker] ${signal} received, closing worker`);
   clearInterval(heartbeatTimer);
   clearInterval(pollTimer);
   clearInterval(publishTimer);
+  clearInterval(tokenTimer);
   await worker.close();
   process.exit(0);
 }

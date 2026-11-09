@@ -47,6 +47,22 @@ interface WorkspaceMembersData {
   }>;
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+// Mirrors lib/meta/token-refresh.ts: tokens renew with 50 days left, so under
+// 40 means renewal has been failing for at least ten days.
+const RENEWAL_OVERDUE_DAYS_LEFT = 40;
+
+function renewalOverdue(expiresAt: string | null) {
+  if (!expiresAt) return false;
+  return new Date(expiresAt).getTime() - Date.now() < RENEWAL_OVERDUE_DAYS_LEFT * DAY_MS;
+}
+
+function renewalLabel(expiresAt: string | null) {
+  if (!expiresAt) return "Connected";
+  if (new Date(expiresAt).getTime() < Date.now()) return "Connection expired, reconnect";
+  return "Renews automatically";
+}
+
 export default function SettingsPage() {
   const [data, setData] = useState<SettingsData | null>(null);
   const [membersData, setMembersData] = useState<WorkspaceMembersData | null>(
@@ -191,12 +207,15 @@ export default function SettingsPage() {
                     @{account.username}
                   </p>
                   <p className="mt-1 text-xs text-muted">
-                    Token expires{" "}
-                    {account.tokenExpiresAt
-                      ? new Date(account.tokenExpiresAt).toLocaleDateString()
-                      : "not available"}{" "}
-                    · {account.webhookSubscribed ? "Webhook ready" : "Webhook pending"}
+                    {renewalLabel(account.tokenExpiresAt)} ·{" "}
+                    {account.webhookSubscribed ? "Webhook ready" : "Webhook pending"}
                   </p>
+                  {renewalOverdue(account.tokenExpiresAt) && (
+                    <p className="mt-1 text-xs text-error">
+                      Automatic renewal has not run lately. Check that the
+                      worker is running, or reconnect this account.
+                    </p>
+                  )}
                 </div>
                 <button
                   onClick={() => disconnectInstagram(account.id)}
