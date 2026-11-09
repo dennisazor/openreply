@@ -217,10 +217,24 @@ If you want to inspect where a comment stopped, the Postgres tables tell you: `W
 
 The Posts page schedules Instagram Reels, including trial reels (shown to non-followers first). The worker publishes them: it checks for due posts once a minute, creates the Instagram upload, waits for Instagram to process the video, then publishes. So publishing needs the worker running, like DMs do.
 
-1. Permission. OpenReply now asks for `instagram_business_content_publish` when you connect. It is part of the "Manage messaging and content on Instagram" use case, so the same Meta app covers it. An account connected before this change has a token without that permission: disconnect it in Settings and connect it again once. Until then, posts fail with a message saying to reconnect.
+1. Permission. OpenReply now asks for `instagram_business_content_publish` when you connect. It is part of the "Manage messaging and content on Instagram" use case, so the same Meta app covers it. An account connected before this change has a token without that permission: press Reconnect next to it in Settings once. Do not use Disconnect for this: disconnecting deletes the account's campaigns and DM logs. Until you reconnect, posts fail with a message saying to reconnect.
 2. Deploy. Run the migration (`npm run db:migrate`) and redeploy both the web app and the worker, since the worker carries the publisher.
 3. Video links. Instagram Login can only publish from a public URL: Instagram downloads the file itself. Use a direct link to the MP4 or MOV (H.264 or HEVC, AAC audio, 3 s to 15 min, under 300 MB). A share page such as a Google Drive or Dropbox preview link will fail.
 4. Trial reels. Instagram decides which accounts can post them; a refused trial shows up as a failed post with Instagram's reason.
+
+### Facebook Page, Threads, sounds and uploads (optional)
+
+A post can go to Instagram, the Facebook Page linked to it, and Threads at once; each platform keeps its own status. These are optional: without them OpenReply posts to Instagram as above.
+
+Facebook (Page Reels, and licensed sounds on Instagram). In the same Meta app, add the use case for Facebook Login for Business and request `instagram_basic`, `instagram_content_publish`, `pages_show_list`, `pages_read_engagement` and `pages_manage_posts`. Add `https://your-app.vercel.app/api/facebook/callback` as a valid OAuth redirect URI. Set `FACEBOOK_APP_ID` (App settings, Basic) and, if you created a Business Login configuration, `FACEBOOK_LOGIN_CONFIG_ID`. Then Settings, Connect with Facebook. The Instagram account must already be connected and linked to the Page in Meta. The Page connection does not expire. Facebook Reels must be 3 to 90 seconds.
+
+Sounds. With Facebook connected, the composer's "Add a sound" lists trending music and original sounds from the Instagram Audio API, with previews and two volume sliders (sound, and the clip's own audio; keep the clip at 1 for b-roll under a sound). Meta only exposes audio cleared for third-party publishing, so the catalog can differ from the Instagram app. Facebook Page posts have no API for music: the clip's own audio is used.
+
+Threads. In the same Meta app, add the Threads use case with `threads_basic` and `threads_content_publish`, add `https://your-app.vercel.app/api/threads/callback` as its redirect URI, and add your Threads profile as a Threads Tester (accept it in Threads, Settings, Account, Website permissions). Set `THREADS_APP_ID` and `THREADS_APP_SECRET` from that use case. Threads posts allow 500 characters. Tokens last 60 days and the worker renews them early.
+
+Uploads. Connect a Vercel Blob store to the project (Vercel, Storage, Blob). That sets `BLOB_READ_WRITE_TOKEN`; copy it to the worker too, so it can delete each upload once every platform has published it. Uploads are MP4 or MOV up to 300 MB and expire after 120 days regardless.
+
+After setting variables, redeploy the web app and the worker, and run `npm run db:migrate` (the Vercel build does this).
 
 Claude connector. Settings, Claude connector, Create token shows a token once and the command that adds OpenReply to Claude Code:
 
@@ -229,7 +243,7 @@ claude mcp add --transport http openreply https://your-app.vercel.app/api/mcp \
   --header "Authorization: Bearer orp_..."
 ```
 
-Claude can then list accounts, schedule Reels (with trial options), list posts with their status and failure reasons, and cancel posts that have not started. A token can post to every Instagram account in the workspace, so only owners and admins can create one; revoke it in Settings if it leaks. Only a hash of each token is stored.
+Claude can then list accounts, search sounds, schedule Reels to any of Instagram, Facebook and Threads (with trial and sound options), list posts with their status and failure reasons, and cancel posts that have not started. A token can post to every Instagram account in the workspace, so only owners and admins can create one; revoke it in Settings if it leaks. Only a hash of each token is stored.
 
 ## Local development
 

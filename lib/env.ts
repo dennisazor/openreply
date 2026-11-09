@@ -46,6 +46,24 @@ export function getMissingInstagramOAuthEnv(): string[] {
   });
 }
 
+function missingFrom(names: readonly string[]): string[] {
+  return names.filter((name) => {
+    const value = process.env[name];
+    if (!value) return true;
+    return name === "ENCRYPTION_KEY" && !HEX_32_BYTE.test(value);
+  });
+}
+
+/** Facebook Login: the Facebook App ID (not the Instagram one) and its secret. */
+export function getMissingFacebookOAuthEnv(): string[] {
+  return missingFrom(["FACEBOOK_APP_ID", "FACEBOOK_APP_SECRET", "ENCRYPTION_KEY", "NEXTAUTH_SECRET"]);
+}
+
+/** Threads API: the Threads app ID and secret from the Threads use case. */
+export function getMissingThreadsOAuthEnv(): string[] {
+  return missingFrom(["THREADS_APP_ID", "THREADS_APP_SECRET", "ENCRYPTION_KEY", "NEXTAUTH_SECRET"]);
+}
+
 export function getMetaGraphApiVersion(): string {
   return process.env.META_GRAPH_API_VERSION ?? "v25.0";
 }

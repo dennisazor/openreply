@@ -14,7 +14,16 @@ vi.mock("@/lib/api-tokens", () => ({ authenticateApiToken: mockAuth }));
 vi.mock("@/lib/db/client", () => ({ prisma: mockPrisma }));
 vi.mock("@/lib/publishing/posts", async () => {
   class SchedulePostError extends Error {}
-  return { ...mockPosts, SchedulePostError, TRIAL_REEL_OPTIONS: ["off", "manual", "auto"] };
+  return {
+    ...mockPosts,
+    SchedulePostError,
+    TRIAL_REEL_OPTIONS: ["off", "manual", "auto"],
+    PLATFORM_OPTIONS: ["instagram", "facebook", "threads"],
+  };
+});
+vi.mock("@/lib/publishing/sounds", async () => {
+  class SoundsUnavailableError extends Error {}
+  return { findSounds: vi.fn().mockResolvedValue([]), SoundsUnavailableError };
 });
 
 import { POST } from "@/app/api/mcp/route";
@@ -59,7 +68,7 @@ describe("/api/mcp", () => {
     expect(body.result.capabilities.tools).toBeDefined();
   });
 
-  it("lists the four publishing tools", async () => {
+  it("lists the publishing tools", async () => {
     const res = await POST(rpc("tools/list"));
     const body = await res.json();
     expect(body.result.tools.map((t: { name: string }) => t.name).sort()).toEqual([
@@ -67,24 +76,32 @@ describe("/api/mcp", () => {
       "list_instagram_accounts",
       "list_scheduled_posts",
       "schedule_instagram_reel",
+      "search_sounds",
     ]);
   });
 
   it("schedules through the token's workspace only", async () => {
-    mockPosts.createScheduledPost.mockResolvedValue({
-      id: "p1",
-      status: "SCHEDULED",
-      caption: "",
-      videoUrl: "https://cdn.example.com/a.mp4",
-      trialGraduation: "MANUAL",
-      shareToFeed: true,
-      publishAt: new Date("2026-11-10T23:00:00Z"),
-      publishedAt: null,
-      permalink: null,
-      errorMessage: null,
-      createdAt: new Date(),
-      instagramAccount: { id: "acc_1", username: "dennis" },
-    });
+    mockPosts.createScheduledPost.mockResolvedValue([
+      {
+        id: "p1",
+        groupId: "g1",
+        platform: "INSTAGRAM",
+        status: "SCHEDULED",
+        caption: "",
+        videoUrl: "https://cdn.example.com/a.mp4",
+        trialGraduation: "MANUAL",
+        shareToFeed: true,
+        audioId: null,
+        audioTitle: null,
+        publishAt: new Date("2026-11-10T23:00:00Z"),
+        publishedAt: null,
+        permalink: null,
+        errorMessage: null,
+        createdAt: new Date(),
+        instagramAccount: { id: "acc_1", username: "dennis", facebookPageName: null },
+        threadsAccount: null,
+      },
+    ]);
 
     const res = await POST(
       rpc("tools/call", {
@@ -107,7 +124,8 @@ describe("/api/mcp", () => {
       })
     );
     expect(body.result.isError).toBeUndefined();
-    expect(JSON.parse(body.result.content[0].text).scheduled.trialReel).toBe("manual");
+    const scheduled = JSON.parse(body.result.content[0].text).scheduled;
+    expect(scheduled[0]).toMatchObject({ trialReel: "manual", platform: "instagram", account: "@dennis" });
   });
 
   it("returns a tool error for an account outside the workspace", async () => {

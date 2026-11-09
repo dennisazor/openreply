@@ -3,21 +3,22 @@
 /**
  * Posts Page
  *
- * A week or month calendar of scheduled, publishing, published and failed
- * Reels, with the composer beside it. The worker does the publishing; this
- * page queues, edits and cancels.
+ * A week or month calendar of posts across Instagram, the linked Facebook
+ * Page and Threads, with the composer beside it. The worker does the
+ * publishing; this page queues, edits and cancels.
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { AccountOption } from "@/components/account-select";
 import { MonthView, TrialBadge, WeekView } from "@/components/posts/calendar-views";
-import PostComposer from "@/components/posts/post-composer";
+import PostComposer, { type Connections } from "@/components/posts/post-composer";
 import {
   addDays,
   formatRange,
+  groupPosts,
   monthGrid,
   POST_STATUS_STYLE,
   weekDays,
+  type PostGroup,
   type PostRow,
 } from "@/lib/publishing/calendar";
 
@@ -25,7 +26,7 @@ type View = "week" | "month";
 
 type ComposerState =
   | { open: false }
-  | { open: true; post: PostRow | null; day: Date | null; key: string };
+  | { open: true; groupKey: string | null; day: Date | null; key: string };
 
 const IN_FLIGHT = ["SCHEDULED", "CREATING", "PROCESSING", "PUBLISHING"];
 
@@ -33,20 +34,28 @@ const LEGEND = ["SCHEDULED", "PROCESSING", "PUBLISHED", "FAILED"].map(
   (status) => POST_STATUS_STYLE[status]
 );
 
+const NO_CONNECTIONS: Connections = {
+  canManage: false,
+  instagramAccounts: [],
+  threadsAccounts: [],
+  configured: { facebook: false, threads: false, uploads: false },
+};
+
 function fetchPosts(): Promise<PostRow[] | null> {
-  return fetch("/api/posts?limit=200")
+  return fetch("/api/posts?limit=300")
     .then((res) => res.json())
     .then((data) => (data.success ? (data.data as PostRow[]) : null));
 }
 
 export default function PostsPage() {
   const [posts, setPosts] = useState<PostRow[]>([]);
-  const [accounts, setAccounts] = useState<AccountOption[]>([]);
+  const [connections, setConnections] = useState<Connections>(NO_CONNECTIONS);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<View>("week");
   const [anchor, setAnchor] = useState(() => new Date());
   const [composer, setComposer] = useState<ComposerState>({ open: false });
   const today = useMemo(() => new Date(), []);
+  const groups = useMemo(() => groupPosts(posts), [posts]);
 
   const refresh = useCallback(() => {
     void fetchPosts().then((rows) => {
@@ -55,13 +64,10 @@ export default function PostsPage() {
   }, []);
 
   useEffect(() => {
-    Promise.all([
-      fetchPosts(),
-      fetch("/api/instagram/accounts").then((res) => res.json()),
-    ])
-      .then(([rows, accountData]) => {
+    Promise.all([fetchPosts(), fetch("/api/connections").then((res) => res.json())])
+      .then(([rows, connectionData]) => {
         if (rows) setPosts(rows);
-        if (accountData.success) setAccounts(accountData.data.instagramAccounts);
+        if (connectionData.success) setConnections(connectionData.data);
       })
       .finally(() => setLoading(false));
   }, []);
@@ -88,20 +94,23 @@ export default function PostsPage() {
     );
   }
 
-  function openPost(post: PostRow) {
-    setComposer({ open: true, post, day: null, key: post.id });
+  function openGroup(group: PostGroup) {
+    setComposer({ open: true, groupKey: group.key, day: null, key: group.key });
   }
 
   function openNew(day: Date | null) {
     setComposer({
       open: true,
-      post: null,
+      groupKey: null,
       day,
       key: `new-${day?.toISOString() ?? "now"}-${Date.now()}`,
     });
   }
 
-  const selectedId = composer.open ? (composer.post?.id ?? null) : null;
+  const selectedKey = composer.open ? composer.groupKey : null;
+  // Look the group up fresh each render so refreshed statuses show in the panel.
+  const selectedGroup = selectedKey ? (groups.find((g) => g.key === selectedKey) ?? null) : null;
+  const noAccounts = !loading && connections.instagramAccounts.length === 0 && connections.threadsAccounts.length === 0;
 
   return (
     <div className="flex flex-col gap-5">
@@ -160,7 +169,7 @@ export default function PostsPage() {
           <button
             type="button"
             onClick={() => openNew(null)}
-            disabled={accounts.length === 0}
+            disabled={noAccounts}
             className="press inline-flex min-h-11 items-center gap-2 rounded-full bg-accent px-[18px] text-[15px] font-semibold text-white hover:bg-accent-hover disabled:opacity-50"
           >
             <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
@@ -182,9 +191,10 @@ export default function PostsPage() {
           <TrialBadge />
           Trial reel
         </span>
+        <span className="text-muted">IG Instagram · FB Facebook · TH Threads</span>
       </div>
 
-      {!loading && accounts.length === 0 && (
+      {noAccounts && (
         <div className="panel flex flex-wrap items-center justify-between gap-3 p-5">
           <p className="text-[15px]">Connect Instagram to start scheduling Reels.</p>
           <a
@@ -203,20 +213,21 @@ export default function PostsPage() {
           ) : view === "week" ? (
             <WeekView
               days={days}
-              posts={posts}
+              groups={groups}
               today={today}
-              selectedId={selectedId}
-              onPick={openPost}
+              selectedKey={selectedKey}
+              onPick={openGroup}
               onAdd={openNew}
+              compact={composer.open}
             />
           ) : (
             <MonthView
               days={days}
               month={anchor.getMonth()}
-              posts={posts}
+              groups={groups}
               today={today}
-              selectedId={selectedId}
-              onPick={openPost}
+              selectedKey={selectedKey}
+              onPick={openGroup}
               onAdd={openNew}
             />
           )}
@@ -225,9 +236,9 @@ export default function PostsPage() {
         {composer.open && (
           <PostComposer
             key={composer.key}
-            post={composer.post}
+            group={selectedGroup}
             day={composer.day}
-            accounts={accounts}
+            connections={connections}
             onClose={() => setComposer({ open: false })}
             onChanged={refresh}
           />

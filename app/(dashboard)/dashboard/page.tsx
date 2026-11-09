@@ -10,20 +10,28 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import AccountSelect, { type AccountOption } from "@/components/account-select";
-import { TrialBadge } from "@/components/posts/calendar-views";
+import { PlatformMarks, TrialBadge } from "@/components/posts/calendar-views";
 import StatCard from "@/components/stat-card";
 import StatusBadge from "@/components/status-badge";
 import {
   DAY_NAMES,
   formatTime,
   formatWhen,
+  groupPosts,
+  groupsOnDay,
+  groupStatus,
+  PLATFORM_LABEL,
   postDate,
-  postsOnDay,
   sameDay,
   statusStyle,
   weekDays,
   type PostRow,
 } from "@/lib/publishing/calendar";
+
+interface ConnectionsSummary {
+  instagramAccounts: { id: string; username: string; facebookPageName: string | null }[];
+  threadsAccounts: { id: string; username: string }[];
+}
 
 interface DashboardStats {
   userName: string | null;
@@ -82,6 +90,7 @@ function Card({
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [posts, setPosts] = useState<PostRow[]>([]);
+  const [connections, setConnections] = useState<ConnectionsSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedAccountId, setSelectedAccountId] = useState("all");
   const now = useMemo(() => new Date(), []);
@@ -94,11 +103,13 @@ export default function DashboardPage() {
 
     Promise.all([
       fetch(`/api/dashboard/stats${params.size ? `?${params}` : ""}`).then((r) => r.json()),
-      fetch("/api/posts?limit=200").then((r) => r.json()),
+      fetch("/api/posts?limit=300").then((r) => r.json()),
+      fetch("/api/connections").then((r) => r.json()),
     ])
-      .then(([statsData, postsData]) => {
+      .then(([statsData, postsData, connectionData]) => {
         if (statsData.success) setStats(statsData.data);
         if (postsData.success) setPosts(postsData.data);
+        if (connectionData.success) setConnections(connectionData.data);
       })
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -109,25 +120,28 @@ export default function DashboardPage() {
     setSelectedAccountId(accountId);
   }
 
-  const visiblePosts =
+  // A post sent to several platforms counts once.
+  const groups = groupPosts(
     selectedAccountId === "all"
       ? posts
-      : posts.filter((post) => post.instagramAccount.id === selectedAccountId);
+      : posts.filter((post) => !post.instagramAccount || post.instagramAccount.id === selectedAccountId)
+  );
 
-  const nextPost = visiblePosts
-    .filter((post) => UPCOMING.includes(post.status))
-    .sort((a, b) => postDate(a).getTime() - postDate(b).getTime())[0];
+  const nextGroup = groups
+    .filter((group) => UPCOMING.includes(groupStatus(group)))
+    .sort((a, b) => postDate(a.lead).getTime() - postDate(b.lead).getTime())[0];
+  const nextPost = nextGroup?.lead;
 
   const week = weekDays(now).map((day, index) => {
-    const dayPosts = postsOnDay(visiblePosts, day);
-    const trials = dayPosts.filter((post) => post.trialGraduation).length;
+    const dayGroups = groupsOnDay(groups, day);
+    const trials = dayGroups.filter((group) => group.lead.trialGraduation).length;
     let summary = "Nothing scheduled";
-    if (dayPosts.length === 1) {
-      summary = `${formatTime(postDate(dayPosts[0]))} reel${trials ? ", trial" : ""}`;
-    } else if (dayPosts.length > 1) {
-      summary = `${dayPosts.length} reels${trials ? `, ${trials} trial` : ""}`;
+    if (dayGroups.length === 1) {
+      summary = `${formatTime(postDate(dayGroups[0].lead))} post${trials ? ", trial" : ""}`;
+    } else if (dayGroups.length > 1) {
+      summary = `${dayGroups.length} posts${trials ? `, ${trials} trial` : ""}`;
     }
-    return { day, name: DAY_NAMES[index], summary, empty: dayPosts.length === 0 };
+    return { day, name: DAY_NAMES[index], summary, empty: dayGroups.length === 0 };
   });
 
   if (loading) {
@@ -202,7 +216,7 @@ export default function DashboardPage() {
                     {formatWhen(postDate(nextPost), now)}
                   </span>
                   <span className="text-sm text-muted">
-                    Reel on Instagram · @{nextPost.instagramAccount.username}
+                    {nextGroup.rows.map((row) => PLATFORM_LABEL[row.platform]).join(", ")}
                   </span>
                 </div>
                 {nextPost.caption && (
@@ -218,10 +232,18 @@ export default function DashboardPage() {
                     </span>
                   )}
                   <span
-                    className={`inline-flex items-center rounded-lg px-2.5 py-1.5 text-[13px] font-semibold ${statusStyle(nextPost.status).text} ${statusStyle(nextPost.status).soft}`}
+                    className={`inline-flex items-center rounded-lg px-2.5 py-1.5 text-[13px] font-semibold ${statusStyle(groupStatus(nextGroup)).text} ${statusStyle(groupStatus(nextGroup)).soft}`}
                   >
-                    {statusStyle(nextPost.status).label}
+                    {statusStyle(groupStatus(nextGroup)).label}
                   </span>
+                  {nextPost.audioTitle && (
+                    <span className="inline-flex items-center rounded-lg bg-surface-hover px-2.5 py-1.5 text-[13px] font-semibold">
+                      Sound: {nextPost.audioTitle}
+                    </span>
+                  )}
+                </div>
+                <div>
+                  <PlatformMarks group={nextGroup} />
                 </div>
                 <div className="mt-auto flex flex-wrap gap-2.5 pt-1">
                   <Link
@@ -234,7 +256,7 @@ export default function DashboardPage() {
               </div>
             </div>
           ) : (
-            <div className="flex flex-col items-start gap-3 py-6">
+            <div className="flex flex-1 flex-col items-center justify-center gap-3 py-6 text-center">
               <p className="text-[15px] font-semibold">Nothing scheduled</p>
               <p className="text-sm text-muted">
                 Queue a Reel and it shows here with a countdown.
@@ -402,6 +424,41 @@ export default function DashboardPage() {
               )}
             </span>
           </div>
+          {(
+            [
+              {
+                name: "Facebook",
+                mark: "FB",
+                connected: connections?.instagramAccounts.find((a) => a.facebookPageName)?.facebookPageName,
+              },
+              {
+                name: "Threads",
+                mark: "TH",
+                connected: connections?.threadsAccounts[0] && `@${connections.threadsAccounts[0].username}`,
+              },
+            ] as const
+          ).map((platform) => (
+            <div
+              key={platform.name}
+              className="flex min-w-0 flex-[1_1_180px] items-center gap-3 rounded-[14px] bg-canvas p-3.5"
+            >
+              <span
+                className={`inline-flex h-9 w-9 items-center justify-center rounded-[10px] text-[13px] font-bold text-white ${platform.connected ? "bg-foreground" : "bg-[#8e8e93]"}`}
+              >
+                {platform.mark}
+              </span>
+              <span className="flex min-w-0 flex-col">
+                <span className="text-[15px] font-semibold">{platform.name}</span>
+                {platform.connected ? (
+                  <span className="truncate text-[13px] text-success">{platform.connected}</span>
+                ) : (
+                  <Link href="/settings" className="text-[13px] font-semibold text-accent">
+                    Connect in Settings
+                  </Link>
+                )}
+              </span>
+            </div>
+          ))}
           {COMING_PLATFORMS.map((platform) => (
             <div
               key={platform.name}

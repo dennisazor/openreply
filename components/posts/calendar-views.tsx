@@ -1,31 +1,40 @@
 "use client";
 
 /**
- * Week and month views for the Posts page. Every post and every "add" target
- * is a real button, so the calendar works from the keyboard.
+ * Week and month views for the Posts page. A card is one post (its platform
+ * rows grouped), with a mark per platform colored by that platform's status.
+ * Every card and every "add" target is a real button, so the calendar works
+ * from the keyboard.
  */
 
 import {
   DAY_NAMES,
   formatTime,
+  groupsOnDay,
+  groupStatus,
+  PLATFORM_LABEL,
+  PLATFORM_MARK,
   postDate,
-  postsOnDay,
   sameDay,
   statusStyle,
-  type PostRow,
+  type PostGroup,
 } from "@/lib/publishing/calendar";
 
 interface ViewProps {
-  posts: PostRow[];
+  groups: PostGroup[];
   today: Date;
-  selectedId: string | null;
-  onPick: (post: PostRow) => void;
+  selectedKey: string | null;
+  onPick: (group: PostGroup) => void;
   onAdd: (day: Date) => void;
 }
 
-function postTitle(post: PostRow) {
-  const firstLine = post.caption.split("\n")[0].trim();
+function groupTitle(group: PostGroup) {
+  const firstLine = group.lead.caption.split("\n")[0].trim();
   return firstLine || "Untitled reel";
+}
+
+function longDay(day: Date) {
+  return day.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
 }
 
 function PlayTile({ className }: { className: string }) {
@@ -46,19 +55,52 @@ export function TrialBadge() {
   );
 }
 
-export function WeekView({ days, posts, today, selectedId, onPick, onAdd }: ViewProps & { days: Date[] }) {
+/** Per-platform marks, each tinted by that row's status. */
+export function PlatformMarks({ group }: { group: PostGroup }) {
+  return (
+    <span className="flex flex-wrap gap-1">
+      {group.rows.map((row) => {
+        const style = statusStyle(row.status);
+        return (
+          <span
+            key={row.id}
+            title={`${PLATFORM_LABEL[row.platform]}: ${style.label}`}
+            className={`inline-flex items-center gap-1 rounded px-1 py-0.5 text-[10px] font-bold leading-none ${style.soft} ${style.text}`}
+          >
+            <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
+            {PLATFORM_MARK[row.platform]}
+            <span className="sr-only">
+              {PLATFORM_LABEL[row.platform]} {style.label}
+            </span>
+          </span>
+        );
+      })}
+    </span>
+  );
+}
+
+export function WeekView({
+  days,
+  groups,
+  today,
+  selectedKey,
+  onPick,
+  onAdd,
+  compact = false,
+}: ViewProps & { days: Date[]; compact?: boolean }) {
+  // Compact while the composer is open, so all seven days still fit beside it.
   return (
     <div className="overflow-x-auto pb-1">
-      <div className="grid min-w-[840px] grid-cols-7 gap-2.5">
+      <div className={`grid grid-cols-7 ${compact ? "min-w-[588px] gap-1.5" : "min-w-[840px] gap-2.5"}`}>
         {days.map((day, index) => {
           const isToday = sameDay(day, today);
-          const dayPosts = postsOnDay(posts, day);
+          const dayGroups = groupsOnDay(groups, day);
           const isPast = day < today && !isToday;
           return (
             <section
               key={day.toISOString()}
-              aria-label={day.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}
-              className={`flex min-h-[520px] flex-col gap-2 rounded-2xl px-2.5 py-3 ${isToday ? "bg-[#ebebf0]" : "bg-[#efeff4]"}`}
+              aria-label={longDay(day)}
+              className={`flex min-h-[520px] min-w-0 flex-col gap-2 rounded-2xl py-3 ${compact ? "px-1.5" : "px-2.5"} ${isToday ? "bg-[#ebebf0]" : "bg-[#efeff4]"}`}
             >
               <h2 className="mb-1 flex items-center gap-2 text-[13px] font-semibold text-muted">
                 {DAY_NAMES[index]}
@@ -71,14 +113,13 @@ export function WeekView({ days, posts, today, selectedId, onPick, onAdd }: View
                 </span>
               </h2>
 
-              {dayPosts.map((post) => {
-                const style = statusStyle(post.status);
-                const selected = post.id === selectedId;
+              {dayGroups.map((group) => {
+                const selected = group.key === selectedKey;
                 return (
                   <button
-                    key={post.id}
+                    key={group.key}
                     type="button"
-                    onClick={() => onPick(post)}
+                    onClick={() => onPick(group)}
                     aria-pressed={selected}
                     className={`press flex w-full gap-2.5 rounded-xl bg-surface p-2.5 text-left ${
                       selected
@@ -86,21 +127,16 @@ export function WeekView({ days, posts, today, selectedId, onPick, onAdd }: View
                         : "shadow-[0_1px_2px_rgba(0,0,0,0.06)] hover:shadow-[0_2px_8px_rgba(0,0,0,0.08)]"
                     }`}
                   >
-                    <PlayTile className="h-[53px] w-[30px]" />
+                    {!compact && <PlayTile className="h-[53px] w-[30px]" />}
                     <span className="flex min-w-0 flex-1 flex-col gap-1">
                       <span className="flex items-center justify-between gap-1.5">
                         <span className="text-[13px] font-semibold tabular-nums">
-                          {formatTime(postDate(post))}
+                          {formatTime(postDate(group.lead))}
                         </span>
-                        {post.trialGraduation && <TrialBadge />}
+                        {group.lead.trialGraduation && <TrialBadge />}
                       </span>
-                      <span className="line-clamp-2 text-[13px] leading-[1.3]">
-                        {postTitle(post)}
-                      </span>
-                      <span className={`inline-flex items-center gap-1.5 text-xs font-semibold ${style.text}`}>
-                        <span className={`h-[7px] w-[7px] rounded-full ${style.dot}`} />
-                        {style.label}
-                      </span>
+                      <span className="line-clamp-2 text-[13px] leading-[1.3]">{groupTitle(group)}</span>
+                      <PlatformMarks group={group} />
                     </span>
                   </button>
                 );
@@ -110,7 +146,7 @@ export function WeekView({ days, posts, today, selectedId, onPick, onAdd }: View
                 <button
                   type="button"
                   onClick={() => onAdd(day)}
-                  aria-label={`Add a post on ${day.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}`}
+                  aria-label={`Add a post on ${longDay(day)}`}
                   className="press inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-dashed border-[#c7c7cc] text-[13px] font-medium text-muted hover:border-border-hover hover:bg-white/60 hover:text-foreground"
                 >
                   <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -127,7 +163,15 @@ export function WeekView({ days, posts, today, selectedId, onPick, onAdd }: View
   );
 }
 
-export function MonthView({ days, month, posts, today, selectedId, onPick, onAdd }: ViewProps & { days: Date[]; month: number }) {
+export function MonthView({
+  days,
+  month,
+  groups,
+  today,
+  selectedKey,
+  onPick,
+  onAdd,
+}: ViewProps & { days: Date[]; month: number }) {
   return (
     <div className="overflow-x-auto pb-1">
       <div className="panel min-w-[760px] overflow-hidden">
@@ -143,9 +187,8 @@ export function MonthView({ days, month, posts, today, selectedId, onPick, onAdd
             const inMonth = day.getMonth() === month;
             const isToday = sameDay(day, today);
             const isPast = day < today && !isToday;
-            const dayPosts = postsOnDay(posts, day);
-            const shown = dayPosts.slice(0, 3);
-            const label = day.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
+            const dayGroups = groupsOnDay(groups, day);
+            const shown = dayGroups.slice(0, 3);
             return (
               <div
                 key={day.toISOString()}
@@ -161,7 +204,7 @@ export function MonthView({ days, month, posts, today, selectedId, onPick, onAdd
                   <button
                     type="button"
                     onClick={() => onAdd(day)}
-                    aria-label={`Add a post on ${label}`}
+                    aria-label={`Add a post on ${longDay(day)}`}
                     className={`press inline-flex h-[26px] w-[26px] items-center justify-center rounded-full text-[13px] font-semibold ${
                       isToday
                         ? "bg-accent text-white"
@@ -173,28 +216,29 @@ export function MonthView({ days, month, posts, today, selectedId, onPick, onAdd
                     {day.getDate()}
                   </button>
                 )}
-                {shown.map((post) => {
-                  const style = statusStyle(post.status);
+                {shown.map((group) => {
+                  const style = statusStyle(groupStatus(group));
                   return (
                     <button
-                      key={post.id}
+                      key={group.key}
                       type="button"
-                      onClick={() => onPick(post)}
-                      aria-pressed={post.id === selectedId}
+                      onClick={() => onPick(group)}
+                      aria-pressed={group.key === selectedKey}
                       className={`press flex w-full items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[7px] px-1.5 py-1 text-left text-xs ${style.soft} ${
-                        post.id === selectedId ? "shadow-[0_0_0_2px_var(--color-accent)]" : ""
+                        group.key === selectedKey ? "shadow-[0_0_0_2px_var(--color-accent)]" : ""
                       }`}
                     >
                       <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${style.dot}`} />
-                      <span className="font-semibold tabular-nums">{formatTime(postDate(post))}</span>
-                      <span className="truncate">{postTitle(post)}</span>
+                      <span className="font-semibold tabular-nums">{formatTime(postDate(group.lead))}</span>
+                      <span className="truncate">{groupTitle(group)}</span>
+                      <span className="ml-auto shrink-0 text-[10px] font-bold text-muted">
+                        {group.rows.map((row) => PLATFORM_MARK[row.platform]).join(" ")}
+                      </span>
                     </button>
                   );
                 })}
-                {dayPosts.length > shown.length && (
-                  <span className="px-1.5 text-xs text-muted">
-                    {dayPosts.length - shown.length} more
-                  </span>
+                {dayGroups.length > shown.length && (
+                  <span className="px-1.5 text-xs text-muted">{dayGroups.length - shown.length} more</span>
                 )}
               </div>
             );
