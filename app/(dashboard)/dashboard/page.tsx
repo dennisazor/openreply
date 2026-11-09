@@ -234,7 +234,7 @@ export default function DashboardPage() {
               </div>
             </div>
           ) : (
-            <div className="flex flex-col items-start gap-3 py-6">
+            <div className="flex flex-1 flex-col items-center justify-center gap-3 py-6 text-center">
               <p className="text-[15px] font-semibold">Nothing scheduled</p>
               <p className="text-sm text-muted">
                 Queue a Reel and it shows here with a countdown.

@@ -208,6 +208,7 @@ export default function PostsPage() {
               selectedId={selectedId}
               onPick={openPost}
               onAdd={openNew}
+              compact={composer.open}
             />
           ) : (
             <MonthView

@@ -46,10 +46,19 @@ export function TrialBadge() {
   );
 }
 
-export function WeekView({ days, posts, today, selectedId, onPick, onAdd }: ViewProps & { days: Date[] }) {
+export function WeekView({
+  days,
+  posts,
+  today,
+  selectedId,
+  onPick,
+  onAdd,
+  compact = false,
+}: ViewProps & { days: Date[]; compact?: boolean }) {
+  // Compact while the composer is open, so all seven days still fit beside it.
   return (
     <div className="overflow-x-auto pb-1">
-      <div className="grid min-w-[840px] grid-cols-7 gap-2.5">
+      <div className={`grid grid-cols-7 ${compact ? "min-w-[588px] gap-1.5" : "min-w-[840px] gap-2.5"}`}>
         {days.map((day, index) => {
           const isToday = sameDay(day, today);
           const dayPosts = postsOnDay(posts, day);
@@ -58,7 +67,7 @@ export function WeekView({ days, posts, today, selectedId, onPick, onAdd }: View
             <section
               key={day.toISOString()}
               aria-label={day.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}
-              className={`flex min-h-[520px] flex-col gap-2 rounded-2xl px-2.5 py-3 ${isToday ? "bg-[#ebebf0]" : "bg-[#efeff4]"}`}
+              className={`flex min-h-[520px] min-w-0 flex-col gap-2 rounded-2xl py-3 ${compact ? "px-1.5" : "px-2.5"} ${isToday ? "bg-[#ebebf0]" : "bg-[#efeff4]"}`}
             >
               <h2 className="mb-1 flex items-center gap-2 text-[13px] font-semibold text-muted">
                 {DAY_NAMES[index]}
@@ -86,7 +95,7 @@ export function WeekView({ days, posts, today, selectedId, onPick, onAdd }: View
                         : "shadow-[0_1px_2px_rgba(0,0,0,0.06)] hover:shadow-[0_2px_8px_rgba(0,0,0,0.08)]"
                     }`}
                   >
-                    <PlayTile className="h-[53px] w-[30px]" />
+                    {!compact && <PlayTile className="h-[53px] w-[30px]" />}
                     <span className="flex min-w-0 flex-1 flex-col gap-1">
                       <span className="flex items-center justify-between gap-1.5">
                         <span className="text-[13px] font-semibold tabular-nums">
