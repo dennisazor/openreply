@@ -213,6 +213,24 @@ Hit `/api/health` any time. It reports the database, Redis, queue, and worker he
 
 If you want to inspect where a comment stopped, the Postgres tables tell you: `WebhookEvent` for delivery, `DmLog` for send status and errors, `OperationalEvent` for worker crashes and the polling reconciler's sweep logs.
 
+## Publishing Reels and the Claude connector
+
+The Posts page schedules Instagram Reels, including trial reels (shown to non-followers first). The worker publishes them: it checks for due posts once a minute, creates the Instagram upload, waits for Instagram to process the video, then publishes. So publishing needs the worker running, like DMs do.
+
+1. Permission. OpenReply now asks for `instagram_business_content_publish` when you connect. It is part of the "Manage messaging and content on Instagram" use case, so the same Meta app covers it. An account connected before this change has a token without that permission: disconnect it in Settings and connect it again once. Until then, posts fail with a message saying to reconnect.
+2. Deploy. Run the migration (`npm run db:migrate`) and redeploy both the web app and the worker, since the worker carries the publisher.
+3. Video links. Instagram Login can only publish from a public URL: Instagram downloads the file itself. Use a direct link to the MP4 or MOV (H.264 or HEVC, AAC audio, 3 s to 15 min, under 300 MB). A share page such as a Google Drive or Dropbox preview link will fail.
+4. Trial reels. Instagram decides which accounts can post them; a refused trial shows up as a failed post with Instagram's reason.
+
+Claude connector. Settings, Claude connector, Create token shows a token once and the command that adds OpenReply to Claude Code:
+
+```bash
+claude mcp add --transport http openreply https://your-app.vercel.app/api/mcp \
+  --header "Authorization: Bearer orp_..."
+```
+
+Claude can then list accounts, schedule Reels (with trial options), list posts with their status and failure reasons, and cancel posts that have not started. A token can post to every Instagram account in the workspace, so only owners and admins can create one; revoke it in Settings if it leaks. Only a hash of each token is stored.
+
 ## Local development
 
 You need Postgres and Redis. The included `docker-compose.yml` starts both:

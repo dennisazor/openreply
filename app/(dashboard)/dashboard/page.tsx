@@ -3,30 +3,38 @@
 /**
  * Dashboard Home Page
  *
- * Overview cards, 7-day chart, and recent activity feed.
+ * What is going out next, this week's posting plan, DM results, and where
+ * the account is connected.
  */
 
-import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import AccountSelect, { type AccountOption } from "@/components/account-select";
+import { TrialBadge } from "@/components/posts/calendar-views";
 import StatCard from "@/components/stat-card";
 import StatusBadge from "@/components/status-badge";
+import {
+  DAY_NAMES,
+  formatTime,
+  formatWhen,
+  postDate,
+  postsOnDay,
+  sameDay,
+  statusStyle,
+  weekDays,
+  type PostRow,
+} from "@/lib/publishing/calendar";
 
 interface DashboardStats {
   userName: string | null;
   contactsCount: number;
-  totalAutomations: number;
   activeAutomations: number;
-  dmsSentToday: number;
-  dmsSentWeek: number;
   dmsSentMonth: number;
   dmsSkippedMonth: number;
   dmsFailedMonth: number;
-  totalDMs: number;
   clicksThisMonth: number;
-  totalClicks: number;
   ctrThisMonth: number;
   instagramAccounts: AccountOption[];
-  selectedInstagramAccountId: string | null;
   topKeywords: { keyword: string; count: number }[];
   dailyDMs: { date: string; count: number }[];
   recentLogs: Array<{
@@ -40,10 +48,43 @@ interface DashboardStats {
   }>;
 }
 
+const UPCOMING = ["SCHEDULED", "CREATING", "PROCESSING", "PUBLISHING"];
+
+const COMING_PLATFORMS = [
+  { name: "YouTube", mark: "YT", status: "Coming next" },
+  { name: "TikTok", mark: "TT", status: "Coming next" },
+  { name: "X", mark: "X", status: "Coming next" },
+  { name: "Gist", mark: "G", status: "No posting API yet" },
+];
+
+function Card({
+  title,
+  action,
+  className = "",
+  children,
+}: {
+  title: string;
+  action?: React.ReactNode;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className={`panel flex min-w-0 flex-col gap-4 p-6 ${className}`}>
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="title-section">{title}</h2>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
+}
+
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [posts, setPosts] = useState<PostRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedAccountId, setSelectedAccountId] = useState("all");
+  const now = useMemo(() => new Date(), []);
 
   useEffect(() => {
     const params = new URLSearchParams();
@@ -51,10 +92,13 @@ export default function DashboardPage() {
       params.set("instagramAccountId", selectedAccountId);
     }
 
-    fetch(`/api/dashboard/stats${params.size ? `?${params}` : ""}`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.success) setStats(data.data);
+    Promise.all([
+      fetch(`/api/dashboard/stats${params.size ? `?${params}` : ""}`).then((r) => r.json()),
+      fetch("/api/posts?limit=200").then((r) => r.json()),
+    ])
+      .then(([statsData, postsData]) => {
+        if (statsData.success) setStats(statsData.data);
+        if (postsData.success) setPosts(postsData.data);
       })
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -65,137 +109,315 @@ export default function DashboardPage() {
     setSelectedAccountId(accountId);
   }
 
+  const visiblePosts =
+    selectedAccountId === "all"
+      ? posts
+      : posts.filter((post) => post.instagramAccount.id === selectedAccountId);
+
+  const nextPost = visiblePosts
+    .filter((post) => UPCOMING.includes(post.status))
+    .sort((a, b) => postDate(a).getTime() - postDate(b).getTime())[0];
+
+  const week = weekDays(now).map((day, index) => {
+    const dayPosts = postsOnDay(visiblePosts, day);
+    const trials = dayPosts.filter((post) => post.trialGraduation).length;
+    let summary = "Nothing scheduled";
+    if (dayPosts.length === 1) {
+      summary = `${formatTime(postDate(dayPosts[0]))} reel${trials ? ", trial" : ""}`;
+    } else if (dayPosts.length > 1) {
+      summary = `${dayPosts.length} reels${trials ? `, ${trials} trial` : ""}`;
+    }
+    return { day, name: DAY_NAMES[index], summary, empty: dayPosts.length === 0 };
+  });
+
   if (loading) {
     return (
-      <div className="space-y-6">
-        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
-          {[...Array(6)].map((_, i) => (
-            <div key={i} className="panel rounded p-5 h-32">
-              <div className="w-10 h-10 rounded bg-surface-hover" />
-              <div className="mt-4 h-6 w-16 bg-surface-hover rounded" />
-              <div className="mt-2 h-4 w-24 bg-surface-hover/60 rounded" />
-            </div>
+      <div className="flex flex-col gap-5">
+        <div className="h-16 w-72 rounded-2xl bg-fill" />
+        <div className="grid gap-5 lg:grid-cols-3">
+          <div className="panel h-64 lg:col-span-2" />
+          <div className="panel h-64" />
+        </div>
+        <div className="grid grid-cols-2 gap-5 xl:grid-cols-4">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="panel h-32" />
           ))}
         </div>
       </div>
     );
   }
 
-  const maxDM = Math.max(...(stats?.dailyDMs.map((d) => d.count) ?? [1]), 1);
-
-  const connectedCount = stats?.instagramAccounts.length ?? 0;
+  const dailyDMs = stats?.dailyDMs ?? [];
+  const maxDM = Math.max(...dailyDMs.map((d) => d.count), 1);
+  const weekDMs = dailyDMs.reduce((sum, d) => sum + d.count, 0);
+  const accounts = stats?.instagramAccounts ?? [];
 
   return (
-    <div className="space-y-8">
-      {/* Greeting header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground sm:text-3xl">
-            Hello, {stats?.userName ?? "there"}!
-          </h1>
-          <p className="mt-1 text-sm text-muted">
-            {connectedCount} connected{" "}
-            {connectedCount === 1 ? "account" : "accounts"}
-            {" · "}
-            {stats?.contactsCount ?? 0}{" "}
-            {stats?.contactsCount === 1 ? "contact" : "contacts"}
-            {" · "}
-            <a href="/logs" className="text-accent hover:underline">
-              See activity
-            </a>
-          </p>
+    <div className="flex flex-col gap-5">
+      <header className="flex flex-wrap items-end justify-between gap-4 pb-2">
+        <div className="flex flex-col gap-1">
+          <span className="text-[13px] font-semibold text-muted">
+            {now.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}
+          </span>
+          <h1 className="title-large">Hello, {stats?.userName ?? "there"}</h1>
         </div>
-        {stats && stats.instagramAccounts.length > 1 && (
-          <AccountSelect
-            accounts={stats.instagramAccounts}
-            value={selectedAccountId}
-            onChange={handleAccountChange}
-          />
-        )}
+        <div className="flex flex-wrap items-end gap-2.5">
+          {accounts.length > 1 && (
+            <AccountSelect
+              accounts={accounts}
+              value={selectedAccountId}
+              onChange={handleAccountChange}
+            />
+          )}
+          <Link
+            href="/campaigns/new"
+            className="press inline-flex min-h-11 items-center rounded-full bg-fill px-[18px] text-[15px] font-medium hover:bg-border"
+          >
+            New campaign
+          </Link>
+          <Link
+            href="/posts"
+            className="press inline-flex min-h-11 items-center gap-2 rounded-full bg-accent px-[18px] text-[15px] font-semibold text-white hover:bg-accent-hover"
+          >
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+            New post
+          </Link>
+        </div>
+      </header>
+
+      <div className="flex flex-wrap gap-5">
+        <Card title="Up next" className="flex-[2_1_480px]">
+          {nextPost ? (
+            <div className="flex flex-wrap gap-5">
+              <div className="flex h-[199px] w-28 shrink-0 items-center justify-center overflow-hidden rounded-[14px] bg-foreground">
+                <svg aria-hidden="true" width="34" height="34" viewBox="0 0 24 24" fill="#ffffff">
+                  <path d="M8 5.5v13l11-6.5z" />
+                </svg>
+              </div>
+              <div className="flex min-w-[240px] flex-1 flex-col gap-2.5">
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-2xl font-semibold tracking-[-0.015em]">
+                    {formatWhen(postDate(nextPost), now)}
+                  </span>
+                  <span className="text-sm text-muted">
+                    Reel on Instagram · @{nextPost.instagramAccount.username}
+                  </span>
+                </div>
+                {nextPost.caption && (
+                  <p className="line-clamp-3 text-[15px] leading-[1.45]">{nextPost.caption}</p>
+                )}
+                <div className="flex flex-wrap gap-2">
+                  {nextPost.trialGraduation && (
+                    <span className="inline-flex items-center gap-2 rounded-lg bg-surface-hover px-2.5 py-1.5 text-[13px] font-semibold">
+                      <TrialBadge />
+                      {nextPost.trialGraduation === "SS_PERFORMANCE"
+                        ? "Shares to followers if it performs well"
+                        : "You share it to followers"}
+                    </span>
+                  )}
+                  <span
+                    className={`inline-flex items-center rounded-lg px-2.5 py-1.5 text-[13px] font-semibold ${statusStyle(nextPost.status).text} ${statusStyle(nextPost.status).soft}`}
+                  >
+                    {statusStyle(nextPost.status).label}
+                  </span>
+                </div>
+                <div className="mt-auto flex flex-wrap gap-2.5 pt-1">
+                  <Link
+                    href="/posts"
+                    className="press inline-flex min-h-10 items-center rounded-full bg-surface-hover px-4 text-sm font-semibold text-accent hover:bg-fill"
+                  >
+                    Open calendar
+                  </Link>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col items-start gap-3 py-6">
+              <p className="text-[15px] font-semibold">Nothing scheduled</p>
+              <p className="text-sm text-muted">
+                Queue a Reel and it shows here with a countdown.
+              </p>
+              <Link
+                href="/posts"
+                className="press inline-flex min-h-10 items-center rounded-full bg-accent px-4 text-sm font-semibold text-white hover:bg-accent-hover"
+              >
+                Schedule a Reel
+              </Link>
+            </div>
+          )}
+        </Card>
+
+        <Card title="This week" className="flex-[1_1_300px]">
+          <div className="-mx-2.5 flex flex-col">
+            {week.map((row) => {
+              const isToday = sameDay(row.day, now);
+              return (
+                <Link
+                  key={row.name}
+                  href="/posts"
+                  className={`press flex min-h-11 items-center gap-3 rounded-xl px-2.5 hover:bg-surface-hover ${isToday ? "bg-canvas" : ""}`}
+                >
+                  <span className="w-[34px] text-[13px] font-semibold text-muted">{row.name}</span>
+                  <span
+                    className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-sm font-semibold ${
+                      isToday ? "bg-accent text-white" : ""
+                    }`}
+                  >
+                    {row.day.getDate()}
+                  </span>
+                  <span className={`min-w-0 flex-1 truncate text-sm ${row.empty ? "text-muted" : ""}`}>
+                    {row.summary}
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
+        </Card>
       </div>
 
-      {/* Stat Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
-          label="Active Campaigns"
+          label="Active campaigns"
           value={stats?.activeAutomations ?? 0}
+          note={`${stats?.contactsCount ?? 0} contacts`}
         />
-        <StatCard label="DMs Sent" value={stats?.dmsSentMonth ?? 0} />
-        <StatCard label="Skipped" value={stats?.dmsSkippedMonth ?? 0} />
-        <StatCard label="Failed" value={stats?.dmsFailedMonth ?? 0} />
-        <StatCard label="Clicks" value={stats?.clicksThisMonth ?? 0} />
-        <StatCard label="CTR" value={`${stats?.ctrThisMonth ?? 0}%`} />
+        <StatCard
+          label="DMs sent"
+          value={stats?.dmsSentMonth ?? 0}
+          note={`This month · ${stats?.dmsFailedMonth ?? 0} failed, ${stats?.dmsSkippedMonth ?? 0} skipped`}
+        />
+        <StatCard label="Link clicks" value={stats?.clicksThisMonth ?? 0} note="This month, from DM links" />
+        <StatCard
+          label="Click rate"
+          value={`${stats?.ctrThisMonth ?? 0}%`}
+          note={`${stats?.clicksThisMonth ?? 0} clicks from ${stats?.dmsSentMonth ?? 0} DMs`}
+        />
       </div>
 
-      {/* Chart + Recent Activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-6 gap-4 sm:gap-6">
-        {/* 7-Day Chart */}
-        <div className="lg:col-span-3 panel rounded p-4 sm:p-6">
-          <h2 className="text-sm font-semibold text-foreground mb-6">DMs — Last 7 Days</h2>
-          <div className="flex items-end gap-1.5 h-40 sm:gap-2">
-            {stats?.dailyDMs.map((day) => (
-              <div key={day.date} className="min-w-0 flex-1 flex flex-col items-center gap-2">
-                <span className="text-xs text-muted font-medium">{day.count}</span>
-                <div
-                  className="w-full rounded-sm bg-accent min-h-[4px]"
-                  style={{ height: `${Math.max((day.count / maxDM) * 100, 4)}%` }}
-                />
-                {/* Seven labels share a phone's width, so they must not wrap. */}
-                <span className="w-full truncate text-center text-[10px] text-zinc-500">
+      <div className="flex flex-wrap gap-5">
+        <Card
+          title="DMs, last 7 days"
+          action={<span className="text-[13px] text-muted">{weekDMs} sent</span>}
+          className="flex-[2_1_420px]"
+        >
+          <div className="relative flex h-48 flex-col justify-end">
+            {weekDMs === 0 && (
+              <div className="absolute inset-x-0 top-0 bottom-8 flex flex-col items-center justify-center gap-1 text-center">
+                <span className="text-[15px] font-semibold">No DMs this week</span>
+                <span className="text-[13px] text-muted">
+                  Replies appear here as soon as someone comments a keyword.
+                </span>
+              </div>
+            )}
+            <div className="flex h-full items-end gap-2 border-b-2 border-border pb-0">
+              {dailyDMs.map((day) => (
+                <div key={day.date} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1.5">
+                  {day.count > 0 && (
+                    <span className="text-xs font-medium tabular-nums text-muted">{day.count}</span>
+                  )}
+                  <div
+                    className="w-full max-w-10 rounded-t-md bg-accent"
+                    style={{ height: day.count > 0 ? `${Math.max((day.count / maxDM) * 80, 4)}%` : 0 }}
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2 pt-2">
+              {dailyDMs.map((day) => (
+                <span key={day.date} className="min-w-0 flex-1 truncate text-center text-xs text-muted">
                   {day.date}
                 </span>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
+        </Card>
 
-        {/* Top Keywords */}
-        <div className="lg:col-span-1 panel rounded p-4 sm:p-6">
-          <h2 className="text-sm font-semibold text-foreground mb-4">Top Keywords</h2>
-          <div className="space-y-3">
-            {stats?.topKeywords.length === 0 && (
-              <p className="text-sm text-muted py-8">No keyword matches yet</p>
-            )}
-            {stats?.topKeywords.map((keyword) => (
-              <div key={keyword.keyword} className="flex items-center justify-between gap-3">
-                <span className="truncate text-sm font-medium text-foreground">
-                  {keyword.keyword}
-                </span>
-                <span className="text-xs text-muted">{keyword.count}</span>
-              </div>
-            ))}
-          </div>
-        </div>
+        <Card title="Top keywords" className="flex-[1_1_220px]">
+          {stats?.topKeywords.length ? (
+            <ol className="-mt-1 flex flex-col">
+              {stats.topKeywords.map((keyword, index) => (
+                <li
+                  key={keyword.keyword}
+                  className="flex min-h-9 items-center gap-3 border-b border-surface-hover last:border-0"
+                >
+                  <span className="w-4 text-[13px] font-semibold tabular-nums text-muted">{index + 1}</span>
+                  <span className="min-w-0 flex-1 truncate text-[15px]">{keyword.keyword}</span>
+                  <span className="text-[13px] tabular-nums text-muted">{keyword.count}</span>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className="py-6 text-sm text-muted">No keyword matches yet</p>
+          )}
+        </Card>
 
-        {/* Recent Activity */}
-        <div className="lg:col-span-2 panel rounded p-4 sm:p-6">
-          <h2 className="text-sm font-semibold text-foreground mb-4">Recent Activity</h2>
-          <div className="space-y-3 max-h-60 overflow-y-auto">
-            {stats?.recentLogs.length === 0 && (
-              <p className="text-sm text-muted text-center py-8">No activity yet</p>
-            )}
-            {stats?.recentLogs.map((log) => (
-              <div
-                key={log.id}
-                className="flex items-center justify-between gap-3 py-2 border-b border-border last:border-0"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-foreground truncate">
-                    @{log.commenterName ?? "unknown"}
-                  </p>
-                  <p className="text-xs text-muted truncate">
-                    {log.instagramAccount
-                      ? `@${log.instagramAccount.username} · `
-                      : ""}
-                    {log.commentText}
-                  </p>
-                </div>
-                <StatusBadge status={log.status} />
-              </div>
-            ))}
-          </div>
-        </div>
+        <Card
+          title="Recent activity"
+          action={
+            <Link href="/logs" className="text-sm font-semibold text-accent hover:underline">
+              See all
+            </Link>
+          }
+          className="flex-[1_1_280px]"
+        >
+          {stats?.recentLogs.length ? (
+            <ul className="-mt-1 flex max-h-64 flex-col overflow-y-auto">
+              {stats.recentLogs.map((log) => (
+                <li
+                  key={log.id}
+                  className="flex min-h-11 items-center justify-between gap-3 border-b border-surface-hover py-1.5 last:border-0"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-[15px]">@{log.commenterName ?? "unknown"}</p>
+                    <p className="truncate text-xs text-muted">{log.commentText}</p>
+                  </div>
+                  <StatusBadge status={log.status} />
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="py-6 text-sm text-muted">No activity yet</p>
+          )}
+        </Card>
       </div>
+
+      <Card title="Where you post">
+        <div className="flex flex-wrap gap-3">
+          <div className="flex min-w-0 flex-[1_1_180px] items-center gap-3 rounded-[14px] bg-canvas p-3.5">
+            <span className="inline-flex h-9 w-9 items-center justify-center rounded-[10px] bg-foreground text-[13px] font-bold text-white">
+              IG
+            </span>
+            <span className="flex min-w-0 flex-col">
+              <span className="text-[15px] font-semibold">Instagram</span>
+              {accounts.length > 0 ? (
+                <span className="truncate text-[13px] text-success">
+                  {accounts.length === 1 ? `@${accounts[0].username}` : `${accounts.length} accounts`}
+                </span>
+              ) : (
+                <a href="/api/instagram/connect" className="text-[13px] font-semibold text-accent">
+                  Connect
+                </a>
+              )}
+            </span>
+          </div>
+          {COMING_PLATFORMS.map((platform) => (
+            <div
+              key={platform.name}
+              className="flex min-w-0 flex-[1_1_180px] items-center gap-3 rounded-[14px] bg-canvas p-3.5"
+            >
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-[10px] bg-[#8e8e93] text-[13px] font-bold text-white">
+                {platform.mark}
+              </span>
+              <span className="flex min-w-0 flex-col">
+                <span className="text-[15px] font-semibold">{platform.name}</span>
+                <span className="text-[13px] text-muted">{platform.status}</span>
+              </span>
+            </div>
+          ))}
+        </div>
+      </Card>
     </div>
   );
 }
