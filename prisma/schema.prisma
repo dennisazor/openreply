@@ -86,6 +86,7 @@ model Workspace {
   operationalEvents OperationalEvent[]
   scheduledPosts    ScheduledPost[]
   apiTokens         ApiToken[]
+  threadsAccounts   ThreadsAccount[]
 
   @@index([ownerId])
 }
@@ -137,6 +138,21 @@ model InstagramAccount {
   webhookSubscribed Boolean  @default(false)
   connectedAt       DateTime @default(now())
   updatedAt         DateTime @updatedAt
+
+  /// Set by "Connect with Facebook": the Page linked to this Instagram
+  /// account. The Page token does not expire and publishes to Instagram
+  /// (with sounds and direct uploads) and to the Page itself.
+  facebookPageId        String?
+  facebookPageName      String?
+  /// The Instagram user ID as Facebook Login reports it. Meta does not
+  /// promise it equals instagramId (from Instagram Login), so it is kept apart.
+  facebookIgUserId      String?
+  facebookPageToken     String?
+  /// Long-lived user token from the same login, about 60 days. Fallback for
+  /// endpoints that only take a user token (Audio API search).
+  facebookUserToken     String?
+  facebookUserExpiresAt DateTime?
+  facebookConnectedAt   DateTime?
 
   workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   automations Automation[]
@@ -355,11 +371,23 @@ model OperationalEvent {
 model ScheduledPost {
   id                 String @id @default(cuid())
   workspaceId        String
-  instagramAccountId String
+  /// Where this row publishes. A post sent to several platforms is one row per
+  /// platform sharing a groupId, so each keeps its own status and retries.
+  platform           PostPlatform @default(INSTAGRAM)
+  groupId            String?
+  /// INSTAGRAM and FACEBOOK rows (the Page linked to this account).
+  instagramAccountId String?
+  /// THREADS rows.
+  threadsAccountId   String?
 
-  /// Public URL Instagram fetches the video from. Instagram Login does not
-  /// support direct uploads, so the file must already be hosted.
+  /// Public URL each platform fetches the video from. Uploads land in Vercel
+  /// Blob; a pasted link works too.
   videoUrl      String
+  /// Licensed sound from the Instagram Audio API (Instagram rows only).
+  audioId       String?
+  audioTitle    String?
+  audioVolume   Int?
+  videoVolume   Int?
   caption       String  @default("")
   coverUrl      String?
   thumbOffsetMs Int?
@@ -378,11 +406,37 @@ model ScheduledPost {
   createdAt    DateTime            @default(now())
   updatedAt    DateTime            @updatedAt
 
-  workspace        Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  instagramAccount InstagramAccount @relation(fields: [instagramAccountId], references: [id], onDelete: Cascade)
+  workspace        Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  instagramAccount InstagramAccount? @relation(fields: [instagramAccountId], references: [id], onDelete: Cascade)
+  threadsAccount   ThreadsAccount?   @relation(fields: [threadsAccountId], references: [id], onDelete: Cascade)
 
   @@index([status, publishAt])
   @@index([workspaceId, publishAt])
+  @@index([groupId])
+}
+
+/// A Threads profile connected through the Threads API. Its token lasts 60
+/// days and is renewed early by lib/meta/token-refresh.ts.
+model ThreadsAccount {
+  id             String    @id @default(cuid())
+  workspaceId    String
+  threadsUserId  String    @unique
+  username       String
+  accessToken    String
+  tokenExpiresAt DateTime?
+  connectedAt    DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  workspace      Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  scheduledPosts ScheduledPost[]
+
+  @@index([workspaceId])
+}
+
+enum PostPlatform {
+  INSTAGRAM
+  FACEBOOK
+  THREADS
 }
 
 /// Bearer token for the Claude connector (MCP endpoint). Only the SHA-256 hash

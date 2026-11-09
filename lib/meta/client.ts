@@ -108,7 +108,9 @@ interface TokenResponse {
   expires_in?: number;
 }
 
-async function handleResponse<T>(response: Response): Promise<T> {
+/** Shared Graph API response handling: maps Meta error codes to typed errors.
+ * Also used by the Facebook (graph.facebook.com) and Threads clients. */
+export async function handleResponse<T>(response: Response): Promise<T> {
   const data = await response.json();
 
   if (!response.ok || (data as GraphApiError).error) {
@@ -764,6 +766,17 @@ export async function subscribeInstagramAccountToWebhooks(
 
 export type TrialGraduationStrategy = "MANUAL" | "SS_PERFORMANCE";
 
+/**
+ * Which host a publishing call goes to. "instagram" uses an Instagram Login
+ * token on graph.instagram.com; "facebook" uses a Page token from Facebook
+ * Login on graph.facebook.com, which also supports the Audio API.
+ */
+export type GraphHost = "instagram" | "facebook";
+
+function graphBase(via: GraphHost) {
+  return via === "facebook" ? facebookGraphBase() : instagramGraphBase();
+}
+
 export interface ReelContainerInput {
   videoUrl: string;
   caption?: string;
@@ -772,12 +785,15 @@ export interface ReelContainerInput {
   shareToFeed?: boolean;
   /** Set to publish as a trial reel, shown to non-followers first. */
   trialGraduation?: TrialGraduationStrategy | null;
+  /** Licensed sound from the Audio API. Facebook host only. */
+  audio?: { audioId: string; audioVolume?: number | null; videoVolume?: number | null } | null;
 }
 
 export async function createReelContainer(
   instagramUserId: string,
   accessToken: string,
-  input: ReelContainerInput
+  input: ReelContainerInput,
+  via: GraphHost = "instagram"
 ): Promise<{ id: string }> {
   const body: Record<string, unknown> = {
     media_type: "REELS",
@@ -793,9 +809,17 @@ export async function createReelContainer(
     // Meta for trials rather than sent alongside trial_params.
     body.share_to_feed = input.shareToFeed;
   }
+  if (input.audio) {
+    // Meta documents audio_configuration as a JSON string.
+    body.audio_configuration = JSON.stringify({
+      audio_id: input.audio.audioId,
+      ...(input.audio.audioVolume != null ? { audio_volume: input.audio.audioVolume } : {}),
+      ...(input.audio.videoVolume != null ? { video_volume: input.audio.videoVolume } : {}),
+    });
+  }
 
   const response = await fetch(
-    `${instagramGraphBase()}/${instagramUserId}/media`,
+    `${graphBase(via)}/${instagramUserId}/media`,
     {
       method: "POST",
       headers: {
@@ -818,9 +842,10 @@ export type ContainerStatusCode =
 
 export async function getContainerStatus(
   containerId: string,
-  accessToken: string
+  accessToken: string,
+  via: GraphHost = "instagram"
 ): Promise<{ status_code: ContainerStatusCode; status?: string }> {
-  const url = new URL(`${instagramGraphBase()}/${containerId}`);
+  const url = new URL(`${graphBase(via)}/${containerId}`);
   url.searchParams.set("fields", "status_code,status");
   url.searchParams.set("access_token", accessToken);
 
@@ -831,10 +856,11 @@ export async function getContainerStatus(
 export async function publishContainer(
   instagramUserId: string,
   accessToken: string,
-  containerId: string
+  containerId: string,
+  via: GraphHost = "instagram"
 ): Promise<{ id: string }> {
   const response = await fetch(
-    `${instagramGraphBase()}/${instagramUserId}/media_publish`,
+    `${graphBase(via)}/${instagramUserId}/media_publish`,
     {
       method: "POST",
       headers: {
@@ -850,9 +876,10 @@ export async function publishContainer(
 
 export async function getMediaPermalink(
   mediaId: string,
-  accessToken: string
+  accessToken: string,
+  via: GraphHost = "instagram"
 ): Promise<string | null> {
-  const url = new URL(`${instagramGraphBase()}/${mediaId}`);
+  const url = new URL(`${graphBase(via)}/${mediaId}`);
   url.searchParams.set("fields", "permalink");
   url.searchParams.set("access_token", accessToken);
 

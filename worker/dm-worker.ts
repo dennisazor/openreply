@@ -2,7 +2,7 @@ import { createDMWorker } from "@/lib/queue/dm-worker";
 import { recordWorkerHeartbeat } from "@/lib/ops/worker-health";
 import { reconcileComments } from "@/lib/polling/comment-reconciler";
 import { runPublishSweep } from "@/lib/publishing/publisher";
-import { refreshExpiringInstagramTokens } from "@/lib/meta/token-refresh";
+import { refreshAllExpiringTokens } from "@/lib/meta/token-refresh";
 import os from "node:os";
 
 const worker = createDMWorker();
@@ -69,7 +69,8 @@ const publishTimer = setInterval(() => void publishSweep(), PUBLISH_INTERVAL_MS)
 const TOKEN_REFRESH_INTERVAL_MS = 6 * 60 * 60_000;
 async function renewTokens() {
   try {
-    const results = await refreshExpiringInstagramTokens();
+    const { instagram, threads } = await refreshAllExpiringTokens();
+    const results = [...instagram, ...threads];
     const failed = results.filter((r) => r.status === "failed").length;
     if (results.length) {
       console.log(`[DM Worker] Token renewal: ${results.length - failed} renewed, ${failed} failed`);

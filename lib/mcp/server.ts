@@ -13,10 +13,12 @@ import {
   cancelScheduledPost,
   createScheduledPost,
   listScheduledPosts,
+  PLATFORM_OPTIONS,
   SchedulePostError,
   TRIAL_REEL_OPTIONS,
   type ScheduledPostView,
 } from "@/lib/publishing/posts";
+import { findSounds, SoundsUnavailableError } from "@/lib/publishing/sounds";
 
 const POST_STATUSES = [
   "SCHEDULED",
@@ -41,10 +43,19 @@ function text(value: unknown, isError = false): CallToolResult {
 }
 
 function viewPost(post: ScheduledPostView) {
+  const account =
+    post.platform === "THREADS"
+      ? post.threadsAccount && `@${post.threadsAccount.username} (Threads)`
+      : post.platform === "FACEBOOK"
+        ? (post.instagramAccount?.facebookPageName ?? "Facebook Page")
+        : post.instagramAccount && `@${post.instagramAccount.username}`;
   return {
     id: post.id,
-    account: `@${post.instagramAccount.username}`,
+    groupId: post.groupId,
+    platform: post.platform.toLowerCase(),
+    account: account ?? "disconnected",
     status: post.status,
+    sound: post.audioTitle ?? (post.audioId ? post.audioId : null),
     publishAt: post.publishAt.toISOString(),
     publishedAt: post.publishedAt?.toISOString() ?? null,
     trialReel:
@@ -97,9 +108,25 @@ export function createWorkspaceMcpServer(workspaceId: string): McpServer {
         "Reels specs: H.264 or HEVC video, AAC audio, 3 s to 15 min, under 300 MB, 9:16 recommended.",
         "trial_reel 'manual' or 'auto' posts a trial reel shown to non-followers first; 'auto' lets Instagram share it to followers if it performs well, 'manual' leaves that to you in the Instagram app. Instagram may refuse trial reels on small accounts.",
         "The worker publishes within about a minute of publish_at, then Instagram processes the video, which can take a few minutes.",
+        "platforms picks where it goes (default instagram); facebook posts a Reel to the linked Facebook Page (3 to 90 s) and threads posts a video thread (caption up to 500 characters). Each platform gets its own status.",
+        "sound_id adds a licensed sound from search_sounds to the Instagram post; set video_volume low for b-roll with a trending sound. Sounds need Facebook connected.",
       ].join(" "),
       inputSchema: {
         video_url: z.string().describe("Direct public https URL of the video file"),
+        platforms: z
+          .array(z.enum(PLATFORM_OPTIONS))
+          .optional()
+          .describe("Where to post: instagram, facebook, threads. Default [instagram]."),
+        sound_id: z.string().optional().describe("Sound id from search_sounds (Instagram only)"),
+        sound_title: z.string().optional().describe("The sound's title, shown in the calendar"),
+        sound_volume: z.number().int().min(1).max(100).optional().describe("Sound volume 1-100, default 100"),
+        video_volume: z
+          .number()
+          .int()
+          .min(1)
+          .max(100)
+          .optional()
+          .describe("Original video audio volume 1-100, default 100. Use 1 for b-roll under a sound."),
         caption: z
           .string()
           .optional()
@@ -149,8 +176,9 @@ export function createWorkspaceMcpServer(workspaceId: string): McpServer {
       }
 
       try {
-        const post = await createScheduledPost(workspaceId, {
+        const rows = await createScheduledPost(workspaceId, {
           instagramAccountId,
+          platforms: args.platforms,
           videoUrl: args.video_url,
           caption: args.caption,
           publishAt: args.publish_at,
@@ -158,10 +186,62 @@ export function createWorkspaceMcpServer(workspaceId: string): McpServer {
           shareToFeed: args.share_to_feed,
           coverUrl: args.cover_url,
           thumbOffsetMs: args.thumb_offset_ms,
+          audioId: args.sound_id,
+          audioTitle: args.sound_title,
+          audioVolume: args.sound_volume,
+          videoVolume: args.video_volume,
         });
-        return text({ scheduled: viewPost(post) });
+        return text({ scheduled: rows.map(viewPost) });
       } catch (error) {
         if (error instanceof SchedulePostError) return text(error.message, true);
+        throw error;
+      }
+    }
+  );
+
+  server.registerTool(
+    "search_sounds",
+    {
+      title: "Search Instagram sounds",
+      description:
+        "Licensed sounds from Instagram's Audio API to attach to an Instagram Reel. With no query it returns what is trending. music is cleared catalog music; original_sound is creators' original audio. Pass a result's id as sound_id to schedule_instagram_reel. Needs Facebook connected.",
+      inputSchema: {
+        query: z.string().optional().describe("Search text. Omit for trending."),
+        type: z.enum(["music", "original_sound"]).optional().describe("Default music"),
+        account: z.string().optional().describe("Instagram username. Defaults to the most recent."),
+      },
+      annotations: { readOnlyHint: true },
+    },
+    async (args) => {
+      let instagramAccountId: string | undefined;
+      if (args.account) {
+        const account = await prisma.instagramAccount.findFirst({
+          where: {
+            workspaceId,
+            username: { equals: args.account.replace(/^@/, ""), mode: "insensitive" },
+          },
+          select: { id: true },
+        });
+        if (!account) return text(`@${args.account} is not connected to this workspace.`, true);
+        instagramAccountId = account.id;
+      }
+      try {
+        const sounds = await findSounds(workspaceId, {
+          type: args.type,
+          query: args.query,
+          instagramAccountId,
+        });
+        return text(
+          sounds.map((s) => ({
+            id: s.id,
+            title: s.title,
+            artist: s.artist,
+            seconds: s.durationMs ? Math.round(s.durationMs / 1000) : null,
+            listen: s.instagramLink ?? s.previewUrl,
+          }))
+        );
+      } catch (error) {
+        if (error instanceof SoundsUnavailableError) return text(error.message, true);
         throw error;
       }
     }

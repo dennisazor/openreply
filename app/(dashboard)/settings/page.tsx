@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import type { AccountOption } from "@/components/account-select";
 import { InstagramConnectNotice } from "@/components/instagram-connect-notice";
 import ClaudeConnectorSettings from "@/components/claude-connector-settings";
+import ConnectionsSettings from "@/components/connections-settings";
 import ProfileSettings from "@/components/profile-settings";
 
 interface SettingsData {
@@ -93,7 +94,11 @@ export default function SettingsPage() {
   }
 
   async function disconnectInstagram(instagramAccountId: string) {
-    if (!confirm("Disconnect Instagram? Campaigns for this account will stop sending DMs.")) {
+    if (
+      !confirm(
+        "Disconnect this Instagram account? This permanently deletes its campaigns and DM logs. To refresh permissions, use Reconnect instead: it keeps everything."
+      )
+    ) {
       return;
     }
 
@@ -217,6 +222,13 @@ export default function SettingsPage() {
                     </p>
                   )}
                 </div>
+                <div className="flex gap-2">
+                <a
+                  href="/api/instagram/connect"
+                  className="press inline-flex min-h-10 items-center justify-center rounded-full bg-surface-hover px-4 text-sm font-semibold text-foreground hover:bg-fill"
+                >
+                  Reconnect
+                </a>
                 <button
                   onClick={() => disconnectInstagram(account.id)}
                   disabled={busy === `disconnect:${account.id}`}
@@ -226,6 +238,7 @@ export default function SettingsPage() {
                     ? "Disconnecting..."
                     : "Disconnect"}
                 </button>
+                </div>
               </div>
             ))}
           </div>
@@ -342,6 +355,10 @@ export default function SettingsPage() {
           </form>
         )}
       </section>
+
+      <Suspense fallback={null}>
+        <ConnectionsSettings />
+      </Suspense>
 
       {canManageMembers && <ClaudeConnectorSettings />}
 

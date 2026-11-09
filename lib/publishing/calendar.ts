@@ -3,19 +3,76 @@
  * server imports). All dates are the viewer's local time; weeks start Monday.
  */
 
-/** A scheduled post as the /api/posts JSON returns it. */
+export type Platform = "INSTAGRAM" | "FACEBOOK" | "THREADS";
+
+/** One platform's row of a post, as the /api/posts JSON returns it. */
 export interface PostRow {
   id: string;
+  groupId: string | null;
+  platform: Platform;
   status: string;
   caption: string;
   videoUrl: string;
   trialGraduation: "MANUAL" | "SS_PERFORMANCE" | null;
   shareToFeed: boolean;
+  audioId: string | null;
+  audioTitle: string | null;
+  audioVolume: number | null;
+  videoVolume: number | null;
   publishAt: string;
   publishedAt: string | null;
   permalink: string | null;
   errorMessage: string | null;
-  instagramAccount: { id: string; username: string };
+  instagramAccount: { id: string; username: string; facebookPageName: string | null } | null;
+  threadsAccount: { id: string; username: string } | null;
+}
+
+/** A post as the calendar shows it: its platform rows together. */
+export interface PostGroup {
+  key: string;
+  rows: PostRow[];
+  /** The row whose content and time stand for the group (Instagram first). */
+  lead: PostRow;
+}
+
+export const PLATFORM_ORDER: Platform[] = ["INSTAGRAM", "FACEBOOK", "THREADS"];
+export const PLATFORM_LABEL: Record<Platform, string> = {
+  INSTAGRAM: "Instagram",
+  FACEBOOK: "Facebook",
+  THREADS: "Threads",
+};
+export const PLATFORM_MARK: Record<Platform, string> = {
+  INSTAGRAM: "IG",
+  FACEBOOK: "FB",
+  THREADS: "TH",
+};
+/** Threads caps post text at 500 characters; Facebook Reels run 3 to 90 s. */
+export const THREADS_TEXT_LIMIT = 500;
+export const FACEBOOK_REEL_MAX_SECONDS = 90;
+
+/** Groups rows by groupId, leaving out canceled rows and empty groups. */
+export function groupPosts(rows: PostRow[]): PostGroup[] {
+  const groups = new Map<string, PostRow[]>();
+  for (const row of rows) {
+    if (row.status === "CANCELED") continue;
+    const key = row.groupId ?? row.id;
+    groups.set(key, [...(groups.get(key) ?? []), row]);
+  }
+  return [...groups.entries()].map(([key, groupRows]) => {
+    const sorted = [...groupRows].sort(
+      (a, b) => PLATFORM_ORDER.indexOf(a.platform) - PLATFORM_ORDER.indexOf(b.platform)
+    );
+    return { key, rows: sorted, lead: sorted[0] };
+  });
+}
+
+const STATUS_RANK = ["FAILED", "CREATING", "PROCESSING", "PUBLISHING", "SCHEDULED", "PUBLISHED"];
+
+/** One status for the whole group: a failure or work in flight wins. */
+export function groupStatus(group: PostGroup): string {
+  return [...group.rows]
+    .map((row) => row.status)
+    .sort((a, b) => STATUS_RANK.indexOf(a) - STATUS_RANK.indexOf(b))[0];
 }
 
 export const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -63,6 +120,12 @@ export function postsOnDay(posts: PostRow[], day: Date): PostRow[] {
   return posts
     .filter((post) => post.status !== "CANCELED" && sameDay(postDate(post), day))
     .sort((a, b) => postDate(a).getTime() - postDate(b).getTime());
+}
+
+export function groupsOnDay(groups: PostGroup[], day: Date): PostGroup[] {
+  return groups
+    .filter((group) => sameDay(postDate(group.lead), day))
+    .sort((a, b) => postDate(a.lead).getTime() - postDate(b.lead).getTime());
 }
 
 export function formatTime(date: Date): string {

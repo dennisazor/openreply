@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db/client";
-import { refreshExpiringInstagramTokens } from "@/lib/meta/token-refresh";
+import { refreshAllExpiringTokens } from "@/lib/meta/token-refresh";
 
 /**
  * Daily backup for token renewal (the worker renews every few hours) plus the
@@ -28,14 +28,14 @@ export async function GET(request: NextRequest) {
     },
   });
 
-  const results = await refreshExpiringInstagramTokens(now);
+  const { instagram, threads } = await refreshAllExpiringTokens(now);
 
   return NextResponse.json({
     success: true,
     data: {
-      totalProcessed: results.length,
+      totalProcessed: instagram.length + threads.length,
       workspacesReset: usageReset.count,
-      results,
+      results: { instagram, threads },
     },
   });
 }
